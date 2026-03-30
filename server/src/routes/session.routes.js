@@ -1,5 +1,6 @@
 const express = require("express");
 const {
+    getActiveSession,
     startSession,
     startBrake,
     endBrake,
@@ -8,6 +9,7 @@ const {
 
 const router = express.Router();
 
+router.get("/active", getActiveSession);
 router.post("/start", startSession);
 router.post("/:id/brake/start", startBrake);
 router.post("/:id/brake/end", endBrake);

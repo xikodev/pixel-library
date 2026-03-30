@@ -4,13 +4,74 @@ function secondsBetween(from, to) {
     return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 1000));
 }
 
+function isMissingStudyGroupColumn(error) {
+    const message = String(error?.message || "");
+    return (
+        (error?.code === "P2022" && message.toLowerCase().includes("studygroupid")) ||
+        (message.includes("Unknown") && message.includes("studyGroupId")) ||
+        (message.includes("Could not find the column") && message.toLowerCase().includes("studygroupid"))
+    );
+}
+
+async function getActiveSession(req, res, next) {
+    try {
+        const personId = Number(req.user.id);
+        try {
+            const session = await prisma.session.findFirst({
+                where: { personId, endDateTime: null },
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                    currentBrakeStartDateTime: true,
+                    studyGroupId: true,
+                },
+                orderBy: { id: "desc" },
+            });
+
+            return res.status(200).json(session);
+        } catch (error) {
+            if (!isMissingStudyGroupColumn(error)) {
+                throw error;
+            }
+
+            const session = await prisma.session.findFirst({
+                where: { personId, endDateTime: null },
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                    currentBrakeStartDateTime: true,
+                },
+                orderBy: { id: "desc" },
+            });
+
+            return res.status(200).json(session ? { ...session, studyGroupId: null } : null);
+        }
+    } catch (error) {
+        return next(error);
+    }
+}
+
 async function startSession(req, res, next) {
     try {
         const personId = Number(req.user.id);
         const { subject } = req.body;
+        const rawStudyGroupId = req.body.studyGroupId;
+        const studyGroupId = rawStudyGroupId === undefined || rawStudyGroupId === null ? null : Number(rawStudyGroupId);
 
         if (!subject || !subject.trim()) {
             return res.status(400).json({ message: "Subject is required" });
+        }
+
+        if (studyGroupId !== null && !Number.isInteger(studyGroupId)) {
+            return res.status(400).json({ message: "Invalid study group id" });
         }
 
         const active = await prisma.session.findFirst({
@@ -22,23 +83,76 @@ async function startSession(req, res, next) {
             return res.status(409).json({ message: "You already have an active session" });
         }
 
-        const session = await prisma.session.create({
-            data: {
+        if (studyGroupId !== null) {
+            const membership = await prisma.partOf.findUnique({
+                where: {
+                    personId_groupId: {
+                        personId,
+                        groupId: studyGroupId,
+                    },
+                },
+                select: { personId: true },
+            });
+
+            if (!membership) {
+                return res.status(403).json({ message: "You are not a member of this group" });
+            }
+        }
+
+        try {
+            const createData = {
                 personId,
                 subject: subject.trim(),
                 startDateTime: new Date(),
-            },
-            select: {
-                id: true,
-                subject: true,
-                startDateTime: true,
-                endDateTime: true,
-                brakeCount: true,
-                brakeTime: true,
-            },
-        });
+            };
 
-        return res.status(201).json(session);
+            if (studyGroupId !== null) {
+                createData.studyGroupId = studyGroupId;
+            }
+
+            const session = await prisma.session.create({
+                data: createData,
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                    studyGroupId: true,
+                },
+            });
+
+            return res.status(201).json(session);
+        } catch (error) {
+            if (!isMissingStudyGroupColumn(error)) {
+                throw error;
+            }
+
+            if (studyGroupId !== null) {
+                return res.status(500).json({
+                    message: "Group study requires the latest database migration (studyGroupID column missing).",
+                });
+            }
+
+            const session = await prisma.session.create({
+                data: {
+                    personId,
+                    subject: subject.trim(),
+                    startDateTime: new Date(),
+                },
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                },
+            });
+
+            return res.status(201).json({ ...session, studyGroupId: null });
+        }
     } catch (error) {
         return next(error);
     }
@@ -233,6 +347,7 @@ async function endSession(req, res, next) {
 }
 
 module.exports = {
+    getActiveSession,
     startSession,
     startBrake,
     endBrake,

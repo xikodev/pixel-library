@@ -23,10 +23,16 @@ function sanitizePerson(person) {
 
 async function signup(req, res, next) {
     try {
-        const { username, email, firstName, lastName, password, character } = req.body;
+        const { username, email, firstName, lastName, password } = req.body;
+        const rawCharacter = req.body.character;
+        const character = rawCharacter === undefined || rawCharacter === null ? 0 : Number(rawCharacter);
 
         if (!username || !email || !firstName || !lastName || !password) {
             return res.status(400).json({ message: "Missing required fields" });
+        }
+
+        if (!Number.isInteger(character) || character < 0 || character > 11) {
+            return res.status(400).json({ message: "Character must be a number between 0 and 11" });
         }
 
         const existing = await prisma.person.findFirst({
@@ -49,7 +55,7 @@ async function signup(req, res, next) {
                 firstName,
                 lastName,
                 password: hashedPassword,
-                character: character ?? null,
+                character,
             },
         });
 
