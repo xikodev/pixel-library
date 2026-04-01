@@ -3,7 +3,7 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState, AppStateStatus, Text, TextInput } from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 import { startBrake } from "@/src/services/sessions";
 import { getStoredActiveSession, setStoredActiveSession } from "@/src/services/session-state";
 
@@ -12,7 +12,7 @@ void SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
     const appStateRef = useRef<AppStateStatus>(AppState.currentState);
     const [fontsLoaded] = useFonts({
-        PixelifySans: require("@/assets/fonts/PixelifySans-VariableFont_wght.ttf"),
+        PixelifySans: require("@/assets/fonts/PixelifySans.ttf"),
     });
 
     const ensureBreakStartedForStoredSession = useCallback(async () => {
@@ -57,17 +57,9 @@ export default function RootLayout() {
     }, [ensureBreakStartedForStoredSession]);
 
     useEffect(() => {
-        if (!fontsLoaded) {
-            return;
+        if (fontsLoaded) {
+            void SplashScreen.hideAsync();
         }
-
-        Text.defaultProps = Text.defaultProps || {};
-        Text.defaultProps.style = [{ fontFamily: "PixelifySans" }, Text.defaultProps.style];
-
-        TextInput.defaultProps = TextInput.defaultProps || {};
-        TextInput.defaultProps.style = [{ fontFamily: "PixelifySans" }, TextInput.defaultProps.style];
-
-        void SplashScreen.hideAsync();
     }, [fontsLoaded]);
 
     if (!fontsLoaded) {
@@ -90,6 +82,7 @@ export default function RootLayout() {
                 <Stack.Screen name="login" />
                 <Stack.Screen name="signup" />
                 <Stack.Screen name="home" />
+                <Stack.Screen name="history" />
                 <Stack.Screen name="groups" />
                 <Stack.Screen name="group/[id]" />
                 <Stack.Screen name="session" />

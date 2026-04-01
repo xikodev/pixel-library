@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Person {
+  id               Int          @id @default(autoincrement()) @map("ID")
+  username         String       @unique
+  email            String       @unique
+  firstName        String
+  lastName         String
+  password         String
+  totalTimeStudied Int          @default(0)
+  totalBrakeTime   Int          @default(0)
+  totalBrakes      Int          @default(0)
+  character        Int          @default(0)
+  sessions         Session[]
+  adminOfGroups    StudyGroup[] @relation("GroupAdmin")
+  partOf           PartOf[]
+
+  @@map("PERSON")
+}
+
+model Session {
+  id            Int       @id @default(autoincrement()) @map("ID")
+  startDateTime DateTime
+  endDateTime   DateTime?
+  currentBrakeStartDateTime DateTime?
+  brakeCount    Int       @default(0)
+  brakeTime     Int       @default(0)
+  subject       String
+  personId      Int       @map("personID")
+  studyGroupId  Int?      @map("studyGroupID")
+  person        Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  studyGroup    StudyGroup? @relation(fields: [studyGroupId], references: [id], onDelete: SetNull)
+
+  @@index([personId])
+  @@index([studyGroupId])
+  @@map("SESSION")
+}
+
+model StudyGroup {
+  id         Int      @id @default(autoincrement()) @map("ID")
+  name       String
+  adminId    Int      @map("adminID")
+  inviteCode String   @unique @db.Char(8)
+  admin      Person   @relation("GroupAdmin", fields: [adminId], references: [id], onDelete: Restrict)
+  members    PartOf[]
+  sessions   Session[]
+
+  @@index([adminId])
+  @@map("STUDYGROUP")
+}
+
+model PartOf {
+  personId Int        @map("personID")
+  groupId  Int        @map("groupID")
+  person   Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  group    StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([personId, groupId])
+  @@index([groupId])
+  @@map("PARTOF")
+}

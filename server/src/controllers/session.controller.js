@@ -59,6 +59,88 @@ async function getActiveSession(req, res, next) {
     }
 }
 
+async function getSessionHistory(req, res, next) {
+    try {
+        const personId = Number(req.user.id);
+
+        try {
+            const sessions = await prisma.session.findMany({
+                where: {
+                    personId,
+                    endDateTime: {
+                        not: null,
+                    },
+                },
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                    studyGroupId: true,
+                },
+                orderBy: {
+                    endDateTime: "desc",
+                },
+                take: 50,
+            });
+
+            const mapped = sessions.map((session) => {
+                const totalSessionSeconds = secondsBetween(session.startDateTime, session.endDateTime);
+                const totalTimeStudied = Math.max(0, totalSessionSeconds - session.brakeTime);
+
+                return {
+                    ...session,
+                    totalTimeStudied,
+                };
+            });
+
+            return res.status(200).json(mapped);
+        } catch (error) {
+            if (!isMissingStudyGroupColumn(error)) {
+                throw error;
+            }
+
+            const sessions = await prisma.session.findMany({
+                where: {
+                    personId,
+                    endDateTime: {
+                        not: null,
+                    },
+                },
+                select: {
+                    id: true,
+                    subject: true,
+                    startDateTime: true,
+                    endDateTime: true,
+                    brakeCount: true,
+                    brakeTime: true,
+                },
+                orderBy: {
+                    endDateTime: "desc",
+                },
+                take: 50,
+            });
+
+            const mapped = sessions.map((session) => {
+                const totalSessionSeconds = secondsBetween(session.startDateTime, session.endDateTime);
+                const totalTimeStudied = Math.max(0, totalSessionSeconds - session.brakeTime);
+
+                return {
+                    ...session,
+                    studyGroupId: null,
+                    totalTimeStudied,
+                };
+            });
+
+            return res.status(200).json(mapped);
+        }
+    } catch (error) {
+        return next(error);
+    }
+}
+
 async function startSession(req, res, next) {
     try {
         const personId = Number(req.user.id);
@@ -348,6 +430,7 @@ async function endSession(req, res, next) {
 
 module.exports = {
     getActiveSession,
+    getSessionHistory,
     startSession,
     startBrake,
     endBrake,

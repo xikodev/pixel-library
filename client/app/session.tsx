@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppTextInput } from "@/components/app-text-input";
+import { InlineStatus } from "@/components/inline-status";
+import { QuestCard } from "@/components/quest-card";
 import { endBrake, endSession, getActiveSession, startBrake, startSession } from "@/src/services/sessions";
 import { clearStoredActiveSession, getStoredActiveSession, setStoredActiveSession } from "@/src/services/session-state";
 import { getGroupDetails } from "@/src/services/groups";
 import { characters } from "@/src/constants/characters";
+import { pixelFontFamily } from "@/src/constants/typography";
+import { getMe } from "@/src/services/user";
 import { formatDuration } from "@/src/utils/time";
 import { Image as ExpoImage } from "expo-image";
 
@@ -37,6 +42,7 @@ export default function SessionScreen() {
     const [nowMs, setNowMs] = useState(Date.now());
     const [restoring, setRestoring] = useState(true);
     const [tableCharacterIds, setTableCharacterIds] = useState<number[]>([]);
+    const [status, setStatus] = useState<{ tone: "error" | "success" | "info"; message: string } | null>(null);
     const forcingBreakRef = useRef(false);
     const hydratedRef = useRef(false);
     const characterImageById = useMemo(() => {
@@ -110,12 +116,13 @@ export default function SessionScreen() {
         async (subjectOverride?: string) => {
             const sessionSubject = (subjectOverride ?? subject).trim();
             if (!sessionSubject) {
-                Alert.alert("Missing subject", "Please enter a subject.");
+                setStatus({ tone: "error", message: "Please enter a subject before starting a session." });
                 return;
             }
 
             try {
                 setLoading(true);
+                setStatus(null);
                 const session = await startSession(sessionSubject, requestedGroupId ?? undefined);
                 setActiveSession({
                     id: session.id,
@@ -146,6 +153,7 @@ export default function SessionScreen() {
                                 existing.currentBrakeStartDateTime ? new Date(existing.currentBrakeStartDateTime).getTime() : null
                             );
                             setSubject(existing.subject);
+                            setStatus({ tone: "info", message: "You already have an active session. Reconnected to it." });
                             return;
                         }
                     } catch {
@@ -153,7 +161,7 @@ export default function SessionScreen() {
                     }
                 }
 
-                Alert.alert("Error", error?.response?.data?.message || "Failed to start session");
+                setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to start session." });
             } finally {
                 setLoading(false);
             }
@@ -238,20 +246,35 @@ export default function SessionScreen() {
         }
     }, []);
 
+    const loadSoloCharacter = useCallback(async () => {
+        try {
+            const me = await getMe();
+            const characterId = Number.isInteger(me.character) && me.character > 0 ? me.character : null;
+            setTableCharacterIds(characterId ? [characterId] : []);
+        } catch {
+            setTableCharacterIds([]);
+        }
+    }, []);
+
     useEffect(() => {
         const groupId = activeSession?.studyGroupId;
-        if (!groupId) {
+        if (!activeSession) {
             setTableCharacterIds([]);
+            return;
+        }
+
+        if (!groupId) {
+            void loadSoloCharacter();
             return;
         }
 
         void loadTableCharacters(groupId);
         const intervalId = setInterval(() => {
             void loadTableCharacters(groupId);
-        }, 8000);
+        }, 2000);
 
         return () => clearInterval(intervalId);
-    }, [activeSession?.studyGroupId, loadTableCharacters]);
+    }, [activeSession, activeSession?.studyGroupId, loadSoloCharacter, loadTableCharacters]);
 
     async function handleStartBrake() {
         if (!activeSession) {
@@ -264,6 +287,7 @@ export default function SessionScreen() {
             setOnBreak(true);
             setBrakeStartedAt(Date.now());
             setActiveSession((previous) => (previous ? { ...previous, brakeCount: result.brakeCount } : previous));
+            setStatus({ tone: "info", message: "Break started." });
         } catch (error: any) {
             if (error?.response?.status === 409) {
                 try {
@@ -283,13 +307,14 @@ export default function SessionScreen() {
                                   }
                                 : previous
                         );
+                        setStatus({ tone: "info", message: "Break already active. Session state refreshed." });
                         return;
                     }
                 } catch {
                     // Fall through to the existing error alert below.
                 }
             }
-            Alert.alert("Error", error?.response?.data?.message || "Failed to start break");
+            setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to start break." });
         } finally {
             setLoading(false);
         }
@@ -306,8 +331,9 @@ export default function SessionScreen() {
             setOnBreak(false);
             setBrakeStartedAt(null);
             setActiveSession((previous) => (previous ? { ...previous, brakeTime: result.brakeTime } : previous));
+            setStatus({ tone: "success", message: "Break ended. Focus time resumed." });
         } catch (error: any) {
-            Alert.alert("Error", error?.response?.data?.message || "Failed to end break");
+            setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to end break." });
         } finally {
             setLoading(false);
         }
@@ -321,19 +347,17 @@ export default function SessionScreen() {
         try {
             setLoading(true);
             const result = await endSession(activeSession.id);
-            Alert.alert(
-                "Session ended",
-                `Studied: ${formatDuration(result.totalsAdded.totalTimeStudied)}\nBreaks: ${
-                    result.totalsAdded.totalBrakes
-                }\nBreak time: ${formatDuration(result.totalsAdded.totalBrakeTime)}`
-            );
+            setStatus({
+                tone: "success",
+                message: `Session ended. Studied ${formatDuration(result.totalsAdded.totalTimeStudied)} with ${result.totalsAdded.totalBrakes} breaks.`,
+            });
             setActiveSession(null);
             setOnBreak(false);
             setBrakeStartedAt(null);
             setSubject("");
             await clearStoredActiveSession();
         } catch (error: any) {
-            Alert.alert("Error", error?.response?.data?.message || "Failed to end session");
+            setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to end session." });
         } finally {
             setLoading(false);
         }
@@ -352,7 +376,16 @@ export default function SessionScreen() {
     const hasValidSubject = subject.trim().length > 0;
 
     if (restoring) {
-        return <SafeAreaView style={styles.preSessionScreen} />;
+        return (
+            <SafeAreaView style={styles.preSessionScreen}>
+                <QuestCard
+                    eyebrow="Loading"
+                    title="Preparing your desk..."
+                    description="Restoring your last session state and checking whether you're already studying."
+                    accent="blue"
+                />
+            </SafeAreaView>
+        );
     }
 
     if (!activeSession) {
@@ -362,14 +395,26 @@ export default function SessionScreen() {
                     <Text style={styles.backText}>{"< Back"}</Text>
                 </Pressable>
 
-                <Text style={styles.preSessionTitle}>Start Session</Text>
+                <Text style={styles.preSessionTitle}>Start Solo Session</Text>
                 {requestedGroupId ? <Text style={styles.groupHint}>Starting in group study mode</Text> : null}
 
-                <TextInput
+                <QuestCard
+                    eyebrow={requestedGroupId ? "Party Mode" : "Solo Run"}
+                    title={requestedGroupId ? "Join the group table" : "Open a fresh focus run"}
+                    description={
+                        requestedGroupId
+                            ? "Pick a subject and join the shared study room."
+                            : "Choose what you're studying and begin your next focused session."
+                    }
+                    accent={requestedGroupId ? "green" : "amber"}
+                />
+
+                <AppTextInput
                     placeholder="Subject"
                     placeholderTextColor="#9ca3af"
                     value={subject}
                     onChangeText={setSubject}
+                    onFocus={() => setStatus(null)}
                     onSubmitEditing={() => {
                         if (!loading && hasValidSubject) {
                             void handleStartSession();
@@ -379,6 +424,8 @@ export default function SessionScreen() {
                     editable={!loading}
                     style={styles.preSessionInput}
                 />
+
+                {status ? <InlineStatus tone={status.tone} message={status.message} /> : null}
 
                 <Pressable
                     onPress={() => {
@@ -395,13 +442,7 @@ export default function SessionScreen() {
 
     return (
         <SafeAreaView style={styles.screen}>
-            <View style={styles.background}>
-                <ExpoImage
-                    source={require("@/assets/library.png")}
-                    style={StyleSheet.absoluteFillObject}
-                    contentFit="cover"
-                    allowDownscaling={false}
-                />
+            <ImageBackground source={require("@/assets/library.png")} resizeMode="cover" style={styles.background}>
                 {tableCharacterIds.length > 0 ? (
                     <View pointerEvents="none" style={styles.tableCharactersRow}>
                         <View style={styles.tableCharactersTrack}>
@@ -452,8 +493,9 @@ export default function SessionScreen() {
                             <Text style={styles.buttonText}>End Session</Text>
                         </Pressable>
                     </View>
+                    {status ? <View style={styles.statusBlock}><InlineStatus tone={status.tone} message={status.message} /></View> : null}
                 </View>
-            </View>
+            </ImageBackground>
         </SafeAreaView>
     );
 }
@@ -470,25 +512,29 @@ const styles = StyleSheet.create({
     },
     preSessionTitle: {
         color: "#ffffff",
-        fontSize: 28,
-        fontWeight: "700",
+        fontSize: 32,
         marginBottom: 16,
         textTransform: "uppercase",
         letterSpacing: 1,
+        fontFamily: pixelFontFamily,
     },
     groupHint: {
         color: "#34d399",
+        fontSize: 17,
         marginBottom: 10,
-        fontWeight: "700",
         textTransform: "uppercase",
         letterSpacing: 0.8,
+        fontFamily: pixelFontFamily,
     },
     preSessionInput: {
         backgroundColor: "#111827",
         color: "#ffffff",
+        fontFamily: pixelFontFamily,
+        fontSize: 18,
         borderRadius: 12,
         paddingHorizontal: 14,
         paddingVertical: 12,
+        marginTop: 14,
         marginBottom: 12,
     },
     preSessionStartButton: {
@@ -549,34 +595,41 @@ const styles = StyleSheet.create({
     },
     backText: {
         color: "#93c5fd",
-        fontWeight: "600",
+        fontSize: 17,
         letterSpacing: 0.4,
+        fontFamily: pixelFontFamily,
     },
     title: {
         color: "#ffffff",
-        fontSize: 26,
-        fontWeight: "700",
+        fontSize: 30,
         marginBottom: 10,
         textTransform: "uppercase",
         letterSpacing: 1,
+        fontFamily: pixelFontFamily,
     },
     sessionCard: {
         backgroundColor: "rgba(17, 24, 39, 0.92)",
         borderRadius: 12,
         padding: 12,
     },
+    statusBlock: {
+        marginTop: 10,
+    },
     sessionSubject: {
         color: "#ffffff",
-        fontWeight: "700",
+        fontSize: 18,
         marginBottom: 6,
         textTransform: "uppercase",
         letterSpacing: 0.8,
+        fontFamily: pixelFontFamily,
     },
     sessionMeta: {
         color: "#d1d5db",
+        fontSize: 16,
         marginBottom: 6,
         textTransform: "uppercase",
         letterSpacing: 0.5,
+        fontFamily: pixelFontFamily,
     },
     breakStartButton: {
         backgroundColor: "#b45309",
@@ -602,8 +655,9 @@ const styles = StyleSheet.create({
     },
     buttonText: {
         color: "#ffffff",
-        fontWeight: "700",
+        fontSize: 18,
         textTransform: "uppercase",
         letterSpacing: 0.8,
+        fontFamily: pixelFontFamily,
     },
 });

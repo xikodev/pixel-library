@@ -1,0 +1,2 @@
+ALTER TABLE `SESSION`
+ADD COLUMN `currentBrakeStartDateTime` DATETIME(3) NULL;

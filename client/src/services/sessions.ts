@@ -11,8 +11,24 @@ type ActiveSession = {
     currentBrakeStartDateTime?: string | null;
 };
 
+export type SessionHistoryItem = {
+    id: number;
+    subject: string;
+    startDateTime: string;
+    endDateTime: string;
+    brakeCount: number;
+    brakeTime: number;
+    studyGroupId?: number | null;
+    totalTimeStudied: number;
+};
+
 export async function getActiveSession() {
     const response = await api.get<ActiveSession | null>("/sessions/active");
+    return response.data;
+}
+
+export async function getSessionHistory() {
+    const response = await api.get<SessionHistoryItem[]>("/sessions/history");
     return response.data;
 }
 

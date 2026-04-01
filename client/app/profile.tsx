@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
 import { characters } from "@/src/constants/characters";
+import { QuestCard } from "@/components/quest-card";
+import { pixelFontFamily } from "@/src/constants/typography";
 import { clearToken } from "@/src/services/token";
 import { deleteMe, getMe, MeDto } from "@/src/services/user";
 import { formatDuration } from "@/src/utils/time";
@@ -59,6 +61,11 @@ export default function ProfileScreen() {
         ]);
     }
 
+    async function handleLogout() {
+        await clearToken();
+        router.replace("/login");
+    }
+
     const selectedCharacter = me ? characters.find((item) => item.id === me.character) : undefined;
 
     return (
@@ -71,7 +78,12 @@ export default function ProfileScreen() {
                 <Text style={styles.title}>Profile</Text>
 
                 {loading ? (
-                    <Text style={styles.subtleText}>Loading...</Text>
+                    <QuestCard
+                        eyebrow="Loading"
+                        title="Opening your adventurer profile"
+                        description="Gathering your stats, character, and account details."
+                        accent="blue"
+                    />
                 ) : me ? (
                     <>
                         <View style={styles.card}>
@@ -99,6 +111,10 @@ export default function ProfileScreen() {
                             <Text style={styles.editButtonText}>Edit</Text>
                         </Pressable>
 
+                        <Pressable onPress={handleLogout} style={styles.logoutButton}>
+                            <Text style={styles.logoutButtonText}>Log Out</Text>
+                        </Pressable>
+
                         <Pressable
                             onPress={confirmDeleteProfile}
                             disabled={deleting}
@@ -108,7 +124,12 @@ export default function ProfileScreen() {
                         </Pressable>
                     </>
                 ) : (
-                    <Text style={styles.subtleText}>No profile data.</Text>
+                    <QuestCard
+                        eyebrow="No Profile"
+                        title="Your profile is missing"
+                        description="We could not load your profile data. Try reopening the app or signing in again."
+                        accent="amber"
+                    />
                 )}
             </View>
         </SafeAreaView>
@@ -131,13 +152,14 @@ const styles = StyleSheet.create({
     },
     backText: {
         color: "#93c5fd",
-        fontWeight: "600",
+        fontSize: 17,
+        fontFamily: pixelFontFamily,
     },
     title: {
         color: "#ffffff",
-        fontSize: 28,
-        fontWeight: "700",
+        fontSize: 32,
         marginBottom: 16,
+        fontFamily: pixelFontFamily,
     },
     card: {
         backgroundColor: "#111827",
@@ -163,26 +185,31 @@ const styles = StyleSheet.create({
     },
     nameText: {
         color: "#ffffff",
-        fontSize: 18,
-        fontWeight: "700",
+        fontSize: 22,
         marginBottom: 6,
         textAlign: "center",
+        fontFamily: pixelFontFamily,
     },
     subtleText: {
         color: "#9ca3af",
+        fontSize: 17,
+        fontFamily: pixelFontFamily,
     },
     emailText: {
         marginBottom: 10,
     },
     statsTitle: {
         color: "#93c5fd",
-        fontWeight: "700",
+        fontSize: 18,
         marginBottom: 8,
         marginTop: 4,
+        fontFamily: pixelFontFamily,
     },
     statText: {
         color: "#ffffff",
+        fontSize: 17,
         marginBottom: 4,
+        fontFamily: pixelFontFamily,
     },
     editButton: {
         backgroundColor: "#2563eb",
@@ -193,7 +220,8 @@ const styles = StyleSheet.create({
     },
     editButtonText: {
         color: "#ffffff",
-        fontWeight: "700",
+        fontSize: 18,
+        fontFamily: pixelFontFamily,
     },
     deleteButton: {
         backgroundColor: "#7f1d1d",
@@ -201,9 +229,22 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingVertical: 12,
     },
+    logoutButton: {
+        backgroundColor: "#1f2937",
+        borderRadius: 10,
+        alignItems: "center",
+        paddingVertical: 12,
+        marginBottom: 10,
+    },
+    logoutButtonText: {
+        color: "#ffffff",
+        fontSize: 18,
+        fontFamily: pixelFontFamily,
+    },
     deleteButtonText: {
         color: "#ffffff",
-        fontWeight: "700",
+        fontSize: 18,
+        fontFamily: pixelFontFamily,
     },
     buttonDisabled: {
         opacity: 0.6,

@@ -4,6 +4,8 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { deleteGroup, getGroupDetails, GroupDetailsDto, removeGroupMember } from "@/src/services/groups";
+import { QuestCard } from "@/components/quest-card";
+import { pixelFontFamily } from "@/src/constants/typography";
 
 export default function GroupDetailsScreen() {
     const params = useLocalSearchParams<{ id: string }>();
@@ -35,6 +37,12 @@ export default function GroupDetailsScreen() {
     useFocusEffect(
         useCallback(() => {
             void loadGroup();
+
+            const intervalId = setInterval(() => {
+                void loadGroup();
+            }, 2000);
+
+            return () => clearInterval(intervalId);
         }, [loadGroup])
     );
 
@@ -102,36 +110,51 @@ export default function GroupDetailsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: "#0b1220" }}>
             <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 48 }}>
                 <Pressable onPress={() => router.back()} style={{ marginBottom: 16 }}>
-                    <Text style={{ color: "#93c5fd" }}>{"< Back"}</Text>
+                    <Text style={{ color: "#93c5fd", fontSize: 17, fontFamily: pixelFontFamily }}>{"< Back"}</Text>
                 </Pressable>
 
                 {!group ? (
-                    <Text style={{ color: "#9ca3af" }}>{loading ? "Loading..." : "Group not found."}</Text>
+                    <QuestCard
+                        eyebrow={loading ? "Loading" : "Missing"}
+                        title={loading ? "Opening the study hall..." : "This group could not be found"}
+                        description={
+                            loading
+                                ? "Fetching the latest members, invite code, and study room activity."
+                                : "It may have been deleted, or you might not have access to it anymore."
+                        }
+                        accent={loading ? "blue" : "amber"}
+                    />
                 ) : (
                     <>
-                        <Text style={{ color: "#ffffff", fontSize: 28, fontWeight: "700", marginBottom: 8 }}>{group.name}</Text>
-                        <Text style={{ color: "#9ca3af", marginBottom: 4 }}>Invite: {group.inviteCode}</Text>
-                        <Text style={{ color: group.isAdmin ? "#93c5fd" : "#9ca3af", marginBottom: 16 }}>
+                        <Text style={{ color: "#ffffff", fontSize: 32, marginBottom: 8, fontFamily: pixelFontFamily }}>
+                            {group.name}
+                        </Text>
+                        <Text style={{ color: "#9ca3af", fontSize: 16, marginBottom: 4, fontFamily: pixelFontFamily }}>Invite: {group.inviteCode}</Text>
+                        <Text style={{ color: group.isAdmin ? "#93c5fd" : "#9ca3af", fontSize: 16, marginBottom: 16, fontFamily: pixelFontFamily }}>
                             {group.isAdmin ? "You are admin" : "You are member"}
                         </Text>
 
                         <View style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 16 }}>
-                            <Text style={{ color: "#93c5fd", fontWeight: "700", marginBottom: 8 }}>Group Study Session</Text>
+                            <Text style={{ color: "#93c5fd", fontSize: 18, marginBottom: 8, fontFamily: pixelFontFamily }}>
+                                Group Study Session
+                            </Text>
 
                             {group.groupStudy.isActive ? (
                                 <>
-                                    <Text style={{ color: "#34d399", fontWeight: "700", marginBottom: 6 }}>Active now</Text>
-                                    <Text style={{ color: "#9ca3af", marginBottom: 10 }}>
+                                    <Text style={{ color: "#34d399", fontSize: 17, marginBottom: 6, fontFamily: pixelFontFamily }}>
+                                        Active now
+                                    </Text>
+                                    <Text style={{ color: "#9ca3af", fontSize: 16, marginBottom: 10, fontFamily: pixelFontFamily }}>
                                         Studying members: {group.groupStudy.activeCount}
                                     </Text>
 
                                     {group.groupStudy.participants.map((participant) => (
                                         <View key={participant.sessionId} style={{ marginBottom: 8 }}>
-                                            <Text style={{ color: "#ffffff", fontWeight: "600" }}>
+                                            <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>
                                                 {participant.person.firstName} {participant.person.lastName}
                                             </Text>
-                                            <Text style={{ color: "#9ca3af" }}>@{participant.person.username}</Text>
-                                            <Text style={{ color: "#d1d5db" }}>Subject: {participant.subject}</Text>
+                                            <Text style={{ color: "#9ca3af", fontSize: 16, fontFamily: pixelFontFamily }}>@{participant.person.username}</Text>
+                                            <Text style={{ color: "#d1d5db", fontSize: 16, fontFamily: pixelFontFamily }}>Subject: {participant.subject}</Text>
                                         </View>
                                     ))}
 
@@ -149,11 +172,11 @@ export default function GroupDetailsScreen() {
                                                 alignItems: "center",
                                             }}
                                         >
-                                            <Text style={{ color: "#ffffff", fontWeight: "700" }}>Join</Text>
+                                            <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>Join</Text>
                                         </Pressable>
                                     ) : (
                                         <Pressable
-                                            onPress={openGroupSessionScreen}
+                                            onPress={() => openGroupSessionScreen()}
                                             style={{
                                                 backgroundColor: "#2563eb",
                                                 borderRadius: 10,
@@ -161,25 +184,32 @@ export default function GroupDetailsScreen() {
                                                 alignItems: "center",
                                             }}
                                         >
-                                            <Text style={{ color: "#ffffff", fontWeight: "700" }}>Continue</Text>
+                                            <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>Continue</Text>
                                         </Pressable>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <Text style={{ color: "#9ca3af", marginBottom: 10 }}>Nobody is in a group study session right now.</Text>
-
-                                    <Pressable
-                                        onPress={openGroupSessionScreen}
-                                        style={{
-                                            backgroundColor: "#2563eb",
-                                            borderRadius: 10,
-                                            paddingVertical: 11,
-                                            alignItems: "center",
-                                        }}
+                                    <QuestCard
+                                        eyebrow="Quiet Room"
+                                        title="No one is studying here yet"
+                                        description="Start the next group session and your friends will be able to join your table."
+                                        accent="green"
                                     >
-                                        <Text style={{ color: "#ffffff", fontWeight: "700" }}>Start Group Study</Text>
-                                    </Pressable>
+                                        <Pressable
+                                            onPress={() => openGroupSessionScreen()}
+                                            style={{
+                                                backgroundColor: "#2563eb",
+                                                borderRadius: 10,
+                                                paddingVertical: 11,
+                                                alignItems: "center",
+                                            }}
+                                        >
+                                            <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>
+                                                Start Group Study
+                                            </Text>
+                                        </Pressable>
+                                    </QuestCard>
                                 </>
                             )}
                         </View>
@@ -196,11 +226,11 @@ export default function GroupDetailsScreen() {
                                     marginBottom: 16,
                                 }}
                             >
-                                <Text style={{ color: "#ffffff", fontWeight: "700" }}>Delete Group</Text>
+                                <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>Delete Group</Text>
                             </Pressable>
                         ) : null}
 
-                        <Text style={{ color: "#93c5fd", fontWeight: "700", marginBottom: 10 }}>
+                        <Text style={{ color: "#93c5fd", fontSize: 18, marginBottom: 10, fontFamily: pixelFontFamily }}>
                             Members ({group.members.length})
                         </Text>
 
@@ -209,12 +239,12 @@ export default function GroupDetailsScreen() {
                                 key={member.id}
                                 style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 10 }}
                             >
-                                <Text style={{ color: "#ffffff", fontWeight: "700" }}>
+                                <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>
                                     {member.firstName} {member.lastName}
                                 </Text>
-                                <Text style={{ color: "#9ca3af", marginTop: 2 }}>@{member.username}</Text>
-                                <Text style={{ color: "#9ca3af", marginBottom: 8 }}>{member.email}</Text>
-                                <Text style={{ color: member.isAdmin ? "#93c5fd" : "#9ca3af", marginBottom: 8 }}>
+                                <Text style={{ color: "#9ca3af", fontSize: 16, marginTop: 2, fontFamily: pixelFontFamily }}>@{member.username}</Text>
+                                <Text style={{ color: "#9ca3af", fontSize: 16, marginBottom: 8, fontFamily: pixelFontFamily }}>{member.email}</Text>
+                                <Text style={{ color: member.isAdmin ? "#93c5fd" : "#9ca3af", fontSize: 16, marginBottom: 8, fontFamily: pixelFontFamily }}>
                                     {member.isAdmin ? "Admin" : "Member"}
                                 </Text>
 
@@ -229,7 +259,9 @@ export default function GroupDetailsScreen() {
                                             alignItems: "center",
                                         }}
                                     >
-                                        <Text style={{ color: "#ffffff", fontWeight: "700" }}>Remove Member</Text>
+                                        <Text style={{ color: "#ffffff", fontSize: 17, fontFamily: pixelFontFamily }}>
+                                            Remove Member
+                                        </Text>
                                     </Pressable>
                                 ) : null}
                             </View>

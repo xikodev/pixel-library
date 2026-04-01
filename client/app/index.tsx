@@ -1,7 +1,9 @@
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { getToken } from "@/src/services/token";
+import { clearStoredActiveSession } from "@/src/services/session-state";
+import { clearToken, getToken } from "@/src/services/token";
+import { getMe } from "@/src/services/user";
 
 export default function IndexScreen() {
     const [loading, setLoading] = useState(true);
@@ -9,9 +11,22 @@ export default function IndexScreen() {
 
     useEffect(() => {
         (async () => {
-            const token = await getToken();
-            setAuthenticated(Boolean(token));
-            setLoading(false);
+            try {
+                const token = await getToken();
+                if (!token) {
+                    setAuthenticated(false);
+                    return;
+                }
+
+                await getMe();
+                setAuthenticated(true);
+            } catch {
+                await clearToken();
+                await clearStoredActiveSession();
+                setAuthenticated(false);
+            } finally {
+                setLoading(false);
+            }
         })();
     }, []);
 

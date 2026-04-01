@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "client",
-    "slug": "client",
+    "name": "Pixel Library",
+    "slug": "pixel-library",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "client",
+    "scheme": "pixellibrary",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.borna.pixellibrary",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.borna.pixellibrary",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -21,6 +23,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
+    "owner": "pixel-library",
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
@@ -43,6 +46,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "projectName": "Pixel Library"
     }
   }
 }
