@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,6 +8,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { characters } from "@/src/constants/characters";
 import { QuestCard } from "@/components/quest-card";
 import { pixelFontFamily } from "@/src/constants/typography";
+import { publicUrls } from "@/src/constants/public-links";
 import { clearToken } from "@/src/services/token";
 import { deleteMe, getMe, MeDto } from "@/src/services/user";
 import { formatDuration } from "@/src/utils/time";
@@ -66,6 +67,19 @@ export default function ProfileScreen() {
         router.replace("/login");
     }
 
+    async function openExternalUrl(url: string, fallbackTitle: string) {
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (!supported) {
+                throw new Error("Unsupported URL");
+            }
+
+            await Linking.openURL(url);
+        } catch {
+            Alert.alert(fallbackTitle, url);
+        }
+    }
+
     const selectedCharacter = me ? characters.find((item) => item.id === me.character) : undefined;
 
     return (
@@ -114,6 +128,39 @@ export default function ProfileScreen() {
                         <Pressable onPress={handleLogout} style={styles.logoutButton}>
                             <Text style={styles.logoutButtonText}>Log Out</Text>
                         </Pressable>
+
+                        <View style={styles.linkCard}>
+                            <Text style={styles.linkCardTitle}>Privacy and support</Text>
+
+                            <Pressable
+                                onPress={() => {
+                                    void openExternalUrl(publicUrls.privacyPolicy, "Privacy policy");
+                                }}
+                                style={styles.linkButton}
+                            >
+                                <Text style={styles.linkButtonText}>Privacy policy</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => {
+                                    void openExternalUrl(publicUrls.accountDeletion, "Account deletion");
+                                }}
+                                style={styles.linkButton}
+                            >
+                                <Text style={styles.linkButtonText}>Delete account on the web</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => {
+                                    void openExternalUrl(publicUrls.support, "Support");
+                                }}
+                                style={styles.linkButton}
+                            >
+                                <Text style={styles.linkButtonText}>Support</Text>
+                            </Pressable>
+
+                            <Text style={styles.linkHint}>Support email: {publicUrls.supportEmail}</Text>
+                        </View>
 
                         <Pressable
                             onPress={confirmDeleteProfile}
@@ -239,6 +286,35 @@ const styles = StyleSheet.create({
     logoutButtonText: {
         color: "#ffffff",
         fontSize: 18,
+        fontFamily: pixelFontFamily,
+    },
+    linkCard: {
+        backgroundColor: "#111827",
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 10,
+    },
+    linkCardTitle: {
+        color: "#93c5fd",
+        fontSize: 18,
+        marginBottom: 8,
+        fontFamily: pixelFontFamily,
+    },
+    linkButton: {
+        backgroundColor: "#1f2937",
+        borderRadius: 10,
+        alignItems: "center",
+        paddingVertical: 10,
+        marginBottom: 8,
+    },
+    linkButtonText: {
+        color: "#ffffff",
+        fontSize: 16,
+        fontFamily: pixelFontFamily,
+    },
+    linkHint: {
+        color: "#9ca3af",
+        fontSize: 15,
         fontFamily: pixelFontFamily,
     },
     deleteButtonText: {

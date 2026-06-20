@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AppTextInput } from "@/components/app-text-input";
 import { InlineStatus } from "@/components/inline-status";
 import { login } from "@/src/services/auth";
+import { getApiErrorMessage } from "@/src/services/api";
 import { pixelFontFamily } from "@/src/constants/typography";
 import { setToken } from "@/src/services/token";
 
@@ -28,9 +29,8 @@ export default function LoginScreen() {
             const result = await login({ identifier, password });
             await setToken(result.token);
             router.replace("/home");
-        } catch (error: any) {
-            const message = error?.response?.data?.message || "Login failed";
-            setStatusMessage(message);
+        } catch (error) {
+            setStatusMessage(getApiErrorMessage(error, "Login failed"));
         } finally {
             setLoading(false);
         }

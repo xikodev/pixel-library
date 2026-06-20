@@ -19,6 +19,16 @@ if (!process.env.JWT_SECRET) {
 const prisma = require("./config/db");
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || "0.0.0.0";
+
+function getNetworkUrls(port) {
+    const os = require("os");
+
+    return Object.values(os.networkInterfaces())
+        .flat()
+        .filter((net) => net && net.family === "IPv4" && !net.internal)
+        .map((net) => `http://${net.address}:${port}`);
+}
 
 async function startServer() {
     try {
@@ -26,7 +36,15 @@ async function startServer() {
         await prisma.$queryRaw`SELECT 1`;
         console.log("Database connection established");
 
-        app.listen(PORT, () => console.log(`API on http://localhost:${PORT}`));
+        app.listen(PORT, HOST, () => {
+            const networkUrls = getNetworkUrls(PORT);
+
+            console.log(`API on http://localhost:${PORT}`);
+
+            if (networkUrls.length > 0) {
+                console.log(`API on ${networkUrls.join(", ")}`);
+            }
+        });
     } catch (error) {
         console.error("Failed to start server:", error.message);
         process.exit(1);

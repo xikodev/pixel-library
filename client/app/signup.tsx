@@ -7,6 +7,7 @@ import { Image as ExpoImage } from "expo-image";
 import { AppTextInput } from "@/components/app-text-input";
 import { InlineStatus } from "@/components/inline-status";
 import { signup } from "@/src/services/auth";
+import { getApiErrorMessage } from "@/src/services/api";
 import { pixelFontFamily } from "@/src/constants/typography";
 import { setToken } from "@/src/services/token";
 import { characters } from "@/src/constants/characters";
@@ -39,9 +40,8 @@ export default function SignupScreen() {
             const result = await signup({ username, email, firstName, lastName, password, character });
             await setToken(result.token);
             router.replace("/home");
-        } catch (error: any) {
-            const message = error?.response?.data?.message || "Sign up failed";
-            setStatusMessage(message);
+        } catch (error) {
+            setStatusMessage(getApiErrorMessage(error, "Sign up failed"));
         } finally {
             setLoading(false);
         }

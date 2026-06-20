@@ -2,6 +2,7 @@
   "expo": {
     "name": "Pixel Library",
     "slug": "pixel-library",
+    "description": "Track study sessions, manage breaks, and study with private groups.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,11 +10,20 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.borna.pixellibrary",
+      "bundleIdentifier": "com.xikodev.pixellibrary",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.borna.pixellibrary",
+      "package": "com.xikodev.pixellibrary",
+      "permissions": [
+        "INTERNET"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.VIBRATE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -29,6 +39,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/with-play-store-hardening",
       "expo-router",
       [
         "expo-splash-screen",
@@ -41,14 +52,21 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
-      "projectName": "Pixel Library"
+      "projectName": "Pixel Library",
+      "publicUrls": {
+        "privacyPolicy": "https://appsupport.xikodev.xyz/pixel-library/privacy-policy/",
+        "support": "https://appsupport.xikodev.xyz/pixel-library/support/",
+        "accountDeletion": "https://appsupport.xikodev.xyz/pixel-library/account-deletion/",
+        "supportEmail": "support@xikodev.xyz"
+      }
     }
   }
 }
