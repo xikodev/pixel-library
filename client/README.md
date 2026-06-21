@@ -9,12 +9,6 @@ Create `client/.env` from `client/.env.example`.
 `EXPO_PUBLIC_API_BASE_URL`
 - Public HTTPS base URL for the deployed API, including `/api`
 
-Environment templates are also available for:
-
-- `client/.env.development.example`
-- `client/.env.preview.example`
-- `client/.env.production.example`
-
 ## Useful Commands
 
 ```bash

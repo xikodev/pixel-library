@@ -1,5 +1,6 @@
 require("dotenv").config();
 const app = require("./app");
+const { query, closePool } = require("./config/db");
 
 if (!process.env.DATABASE_URL) {
     const user = encodeURIComponent(process.env.DB_USER || "");
@@ -16,8 +17,6 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 
-const prisma = require("./config/db");
-
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
@@ -32,8 +31,7 @@ function getNetworkUrls(port) {
 
 async function startServer() {
     try {
-        await prisma.$connect();
-        await prisma.$queryRaw`SELECT 1`;
+        await query("SELECT 1");
         console.log("Database connection established");
 
         app.listen(PORT, HOST, () => {
@@ -54,11 +52,11 @@ async function startServer() {
 startServer();
 
 process.on("SIGINT", async () => {
-    await prisma.$disconnect();
+    await closePool();
     process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-    await prisma.$disconnect();
+    await closePool();
     process.exit(0);
 });

@@ -46,7 +46,7 @@ Users can track focused sessions, manage breaks, and study with friends in invit
 
 - Add production values for `client/.env` and `server/.env` based on the example files only
 - Rotate database credentials and JWT secrets before any public deploy
-- Apply Prisma migrations with `npm run prisma:generate` and your production migration workflow
+- Initialize the database schema with `cd server && npm run db:init`
 - Confirm the mobile app points at the production API over HTTPS
 - Run `npm run lint` in `client` and `npm test` in `server`
 - Verify signup, login, group join, session start, break start/end, session end, profile edit, and account delete on a production-like environment
@@ -58,13 +58,6 @@ Users can track focused sessions, manage breaks, and study with friends in invit
 - The server requires `DATABASE_URL`, `JWT_SECRET`, and should define `CORS_ORIGIN`.
 - Authentication endpoints are rate limited through environment configuration.
 - Production builds should use unique mobile identifiers from `client/app.json`.
-
-## Publishing Docs
-
-- Release runbook: [docs/RELEASE.md](C:/Users/borna/WebstormProjects/pixel-library/docs/RELEASE.md)
-- Operations notes: [docs/OPERATIONS.md](C:/Users/borna/WebstormProjects/pixel-library/docs/OPERATIONS.md)
-- Privacy policy draft: [docs/PRIVACY.md](C:/Users/borna/WebstormProjects/pixel-library/docs/PRIVACY.md)
-- Support policy draft: [docs/SUPPORT.md](C:/Users/borna/WebstormProjects/pixel-library/docs/SUPPORT.md)
 
 ## Licensing
 

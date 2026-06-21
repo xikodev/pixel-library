@@ -1,59 +1,30 @@
-const prisma = require("../config/db");
+const { query, getConnection } = require("../config/db");
 
 function secondsBetween(from, to) {
     return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 1000));
 }
 
-function isMissingStudyGroupColumn(error) {
-    const message = String(error?.message || "");
-    return (
-        (error?.code === "P2022" && message.toLowerCase().includes("studygroupid")) ||
-        (message.includes("Unknown") && message.includes("studyGroupId")) ||
-        (message.includes("Could not find the column") && message.toLowerCase().includes("studygroupid"))
-    );
-}
-
 async function getActiveSession(req, res, next) {
     try {
         const personId = Number(req.user.id);
-        try {
-            const session = await prisma.session.findFirst({
-                where: { personId, endDateTime: null },
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    currentBrakeStartDateTime: true,
-                    studyGroupId: true,
-                },
-                orderBy: { id: "desc" },
-            });
+        const rows = await query(
+            `SELECT
+                ID AS id,
+                subject,
+                startDateTime,
+                endDateTime,
+                brakeCount,
+                brakeTime,
+                currentBrakeStartDateTime,
+                studyGroupID AS studyGroupId
+             FROM SESSION
+             WHERE personID = ? AND endDateTime IS NULL
+             ORDER BY ID DESC
+             LIMIT 1`,
+            [personId]
+        );
 
-            return res.status(200).json(session);
-        } catch (error) {
-            if (!isMissingStudyGroupColumn(error)) {
-                throw error;
-            }
-
-            const session = await prisma.session.findFirst({
-                where: { personId, endDateTime: null },
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    currentBrakeStartDateTime: true,
-                },
-                orderBy: { id: "desc" },
-            });
-
-            return res.status(200).json(session ? { ...session, studyGroupId: null } : null);
-        }
+        return res.status(200).json(rows[0] || null);
     } catch (error) {
         return next(error);
     }
@@ -62,31 +33,24 @@ async function getActiveSession(req, res, next) {
 async function getSessionHistory(req, res, next) {
     try {
         const personId = Number(req.user.id);
+        const sessions = await query(
+            `SELECT
+                ID AS id,
+                subject,
+                startDateTime,
+                endDateTime,
+                brakeCount,
+                brakeTime,
+                studyGroupID AS studyGroupId
+             FROM SESSION
+             WHERE personID = ? AND endDateTime IS NOT NULL
+             ORDER BY endDateTime DESC
+             LIMIT 50`,
+            [personId]
+        );
 
-        try {
-            const sessions = await prisma.session.findMany({
-                where: {
-                    personId,
-                    endDateTime: {
-                        not: null,
-                    },
-                },
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    studyGroupId: true,
-                },
-                orderBy: {
-                    endDateTime: "desc",
-                },
-                take: 50,
-            });
-
-            const mapped = sessions.map((session) => {
+        return res.status(200).json(
+            sessions.map((session) => {
                 const totalSessionSeconds = secondsBetween(session.startDateTime, session.endDateTime);
                 const totalTimeStudied = Math.max(0, totalSessionSeconds - session.brakeTime);
 
@@ -94,48 +58,8 @@ async function getSessionHistory(req, res, next) {
                     ...session,
                     totalTimeStudied,
                 };
-            });
-
-            return res.status(200).json(mapped);
-        } catch (error) {
-            if (!isMissingStudyGroupColumn(error)) {
-                throw error;
-            }
-
-            const sessions = await prisma.session.findMany({
-                where: {
-                    personId,
-                    endDateTime: {
-                        not: null,
-                    },
-                },
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                },
-                orderBy: {
-                    endDateTime: "desc",
-                },
-                take: 50,
-            });
-
-            const mapped = sessions.map((session) => {
-                const totalSessionSeconds = secondsBetween(session.startDateTime, session.endDateTime);
-                const totalTimeStudied = Math.max(0, totalSessionSeconds - session.brakeTime);
-
-                return {
-                    ...session,
-                    studyGroupId: null,
-                    totalTimeStudied,
-                };
-            });
-
-            return res.status(200).json(mapped);
-        }
+            })
+        );
     } catch (error) {
         return next(error);
     }
@@ -156,85 +80,42 @@ async function startSession(req, res, next) {
             return res.status(400).json({ message: "Invalid study group id" });
         }
 
-        const active = await prisma.session.findFirst({
-            where: { personId, endDateTime: null },
-            select: { id: true },
-        });
+        const active = await query(
+            "SELECT ID AS id FROM SESSION WHERE personID = ? AND endDateTime IS NULL LIMIT 1",
+            [personId]
+        );
 
-        if (active) {
+        if (active.length > 0) {
             return res.status(409).json({ message: "You already have an active session" });
         }
 
         if (studyGroupId !== null) {
-            const membership = await prisma.partOf.findUnique({
-                where: {
-                    personId_groupId: {
-                        personId,
-                        groupId: studyGroupId,
-                    },
-                },
-                select: { personId: true },
-            });
+            const membership = await query(
+                "SELECT personID FROM PARTOF WHERE personID = ? AND groupID = ? LIMIT 1",
+                [personId, studyGroupId]
+            );
 
-            if (!membership) {
+            if (membership.length === 0) {
                 return res.status(403).json({ message: "You are not a member of this group" });
             }
         }
 
-        try {
-            const createData = {
-                personId,
-                subject: subject.trim(),
-                startDateTime: new Date(),
-            };
+        const now = new Date();
+        const result = await query(
+            `INSERT INTO SESSION (personID, subject, startDateTime, studyGroupID)
+             VALUES (?, ?, ?, ?)`,
+            [personId, subject.trim(), now, studyGroupId]
+        );
 
-            if (studyGroupId !== null) {
-                createData.studyGroupId = studyGroupId;
-            }
-
-            const session = await prisma.session.create({
-                data: createData,
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    studyGroupId: true,
-                },
-            });
-
-            return res.status(201).json(session);
-        } catch (error) {
-            if (!isMissingStudyGroupColumn(error)) {
-                throw error;
-            }
-
-            if (studyGroupId !== null) {
-                return res.status(500).json({
-                    message: "Group study requires the latest database migration (studyGroupID column missing).",
-                });
-            }
-
-            const session = await prisma.session.create({
-                data: {
-                    personId,
-                    subject: subject.trim(),
-                    startDateTime: new Date(),
-                },
-                select: {
-                    id: true,
-                    subject: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                },
-            });
-
-            return res.status(201).json({ ...session, studyGroupId: null });
-        }
+        return res.status(201).json({
+            id: result.insertId,
+            subject: subject.trim(),
+            startDateTime: now,
+            endDateTime: null,
+            brakeCount: 0,
+            brakeTime: 0,
+            studyGroupId,
+        });
     } catch (error) {
         return next(error);
     }
@@ -249,15 +130,19 @@ async function startBrake(req, res, next) {
             return res.status(400).json({ message: "Invalid session id" });
         }
 
-        const session = await prisma.session.findFirst({
-            where: { id: sessionId, personId },
-            select: {
-                id: true,
-                endDateTime: true,
-                currentBrakeStartDateTime: true,
-            },
-        });
+        const rows = await query(
+            `SELECT
+                ID AS id,
+                brakeCount,
+                endDateTime,
+                currentBrakeStartDateTime
+             FROM SESSION
+             WHERE ID = ? AND personID = ?
+             LIMIT 1`,
+            [sessionId, personId]
+        );
 
+        const session = rows[0];
         if (!session) {
             return res.status(404).json({ message: "Session not found" });
         }
@@ -270,20 +155,19 @@ async function startBrake(req, res, next) {
             return res.status(409).json({ message: "Brake already active" });
         }
 
-        const updated = await prisma.session.update({
-            where: { id: sessionId },
-            data: {
-                brakeCount: { increment: 1 },
-                currentBrakeStartDateTime: new Date(),
-            },
-            select: {
-                id: true,
-                brakeCount: true,
-                currentBrakeStartDateTime: true,
-            },
-        });
+        const now = new Date();
+        await query(
+            `UPDATE SESSION
+             SET brakeCount = brakeCount + 1, currentBrakeStartDateTime = ?
+             WHERE ID = ?`,
+            [now, sessionId]
+        );
 
-        return res.status(200).json(updated);
+        return res.status(200).json({
+            id: sessionId,
+            brakeCount: session.brakeCount + 1,
+            currentBrakeStartDateTime: now,
+        });
     } catch (error) {
         return next(error);
     }
@@ -298,16 +182,19 @@ async function endBrake(req, res, next) {
             return res.status(400).json({ message: "Invalid session id" });
         }
 
-        const session = await prisma.session.findFirst({
-            where: { id: sessionId, personId },
-            select: {
-                id: true,
-                endDateTime: true,
-                brakeTime: true,
-                currentBrakeStartDateTime: true,
-            },
-        });
+        const rows = await query(
+            `SELECT
+                ID AS id,
+                endDateTime,
+                brakeTime,
+                currentBrakeStartDateTime
+             FROM SESSION
+             WHERE ID = ? AND personID = ?
+             LIMIT 1`,
+            [sessionId, personId]
+        );
 
+        const session = rows[0];
         if (!session) {
             return res.status(404).json({ message: "Session not found" });
         }
@@ -322,27 +209,28 @@ async function endBrake(req, res, next) {
 
         const now = new Date();
         const additionalBrakeSeconds = secondsBetween(session.currentBrakeStartDateTime, now);
+        const nextBrakeTime = session.brakeTime + additionalBrakeSeconds;
 
-        const updated = await prisma.session.update({
-            where: { id: sessionId },
-            data: {
-                brakeTime: { increment: additionalBrakeSeconds },
-                currentBrakeStartDateTime: null,
-            },
-            select: {
-                id: true,
-                brakeTime: true,
-                currentBrakeStartDateTime: true,
-            },
+        await query(
+            `UPDATE SESSION
+             SET brakeTime = ?, currentBrakeStartDateTime = NULL
+             WHERE ID = ?`,
+            [nextBrakeTime, sessionId]
+        );
+
+        return res.status(200).json({
+            id: sessionId,
+            brakeTime: nextBrakeTime,
+            currentBrakeStartDateTime: null,
         });
-
-        return res.status(200).json(updated);
     } catch (error) {
         return next(error);
     }
 }
 
 async function endSession(req, res, next) {
+    const connection = await getConnection();
+
     try {
         const personId = Number(req.user.id);
         const sessionId = Number(req.params.id);
@@ -352,79 +240,82 @@ async function endSession(req, res, next) {
         }
 
         const now = new Date();
+        await connection.beginTransaction();
 
-        const result = await prisma.$transaction(async (tx) => {
-            const session = await tx.session.findFirst({
-                where: { id: sessionId, personId },
-                select: {
-                    id: true,
-                    personId: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    currentBrakeStartDateTime: true,
-                },
-            });
+        const [rows] = await connection.query(
+            `SELECT
+                ID AS id,
+                personID AS personId,
+                subject,
+                startDateTime,
+                endDateTime,
+                brakeCount,
+                brakeTime,
+                currentBrakeStartDateTime
+             FROM SESSION
+             WHERE ID = ? AND personID = ?
+             LIMIT 1
+             FOR UPDATE`,
+            [sessionId, personId]
+        );
 
-            if (!session) {
-                return { status: 404, body: { message: "Session not found" } };
-            }
+        const session = rows[0];
+        if (!session) {
+            await connection.rollback();
+            return res.status(404).json({ message: "Session not found" });
+        }
 
-            if (session.endDateTime) {
-                return { status: 400, body: { message: "Session already ended" } };
-            }
+        if (session.endDateTime) {
+            await connection.rollback();
+            return res.status(400).json({ message: "Session already ended" });
+        }
 
-            const additionalBrakeSeconds = session.currentBrakeStartDateTime
-                ? secondsBetween(session.currentBrakeStartDateTime, now)
-                : 0;
+        const additionalBrakeSeconds = session.currentBrakeStartDateTime
+            ? secondsBetween(session.currentBrakeStartDateTime, now)
+            : 0;
 
-            const totalBrakeTime = session.brakeTime + additionalBrakeSeconds;
-            const totalSessionSeconds = secondsBetween(session.startDateTime, now);
-            const totalTimeStudied = Math.max(0, totalSessionSeconds - totalBrakeTime);
+        const totalBrakeTime = session.brakeTime + additionalBrakeSeconds;
+        const totalSessionSeconds = secondsBetween(session.startDateTime, now);
+        const totalTimeStudied = Math.max(0, totalSessionSeconds - totalBrakeTime);
 
-            const endedSession = await tx.session.update({
-                where: { id: sessionId },
-                data: {
-                    endDateTime: now,
-                    brakeTime: totalBrakeTime,
-                    currentBrakeStartDateTime: null,
-                },
-                select: {
-                    id: true,
-                    startDateTime: true,
-                    endDateTime: true,
-                    brakeCount: true,
-                    brakeTime: true,
-                    subject: true,
-                },
-            });
+        await connection.query(
+            `UPDATE SESSION
+             SET endDateTime = ?, brakeTime = ?, currentBrakeStartDateTime = NULL
+             WHERE ID = ?`,
+            [now, totalBrakeTime, sessionId]
+        );
 
-            await tx.person.update({
-                where: { id: personId },
-                data: {
-                    totalBrakeTime: { increment: totalBrakeTime },
-                    totalBrakes: { increment: session.brakeCount },
-                    totalTimeStudied: { increment: totalTimeStudied },
-                },
-            });
+        await connection.query(
+            `UPDATE PERSON
+             SET totalBrakeTime = totalBrakeTime + ?,
+                 totalBrakes = totalBrakes + ?,
+                 totalTimeStudied = totalTimeStudied + ?
+             WHERE ID = ?`,
+            [totalBrakeTime, session.brakeCount, totalTimeStudied, personId]
+        );
 
-            return {
-                status: 200,
-                body: {
-                    session: endedSession,
-                    totalsAdded: {
-                        totalBrakeTime,
-                        totalBrakes: session.brakeCount,
-                        totalTimeStudied,
-                    },
-                },
-            };
+        await connection.commit();
+
+        return res.status(200).json({
+            session: {
+                id: session.id,
+                startDateTime: session.startDateTime,
+                endDateTime: now,
+                brakeCount: session.brakeCount,
+                brakeTime: totalBrakeTime,
+                subject: session.subject,
+            },
+            totalsAdded: {
+                totalBrakeTime,
+                totalBrakes: session.brakeCount,
+                totalTimeStudied,
+            },
         });
-
-        return res.status(result.status).json(result.body);
     } catch (error) {
+        await connection.rollback();
         return next(error);
+    } finally {
+        connection.release();
     }
 }
 

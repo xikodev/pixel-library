@@ -1,51 +1,8 @@
 const crypto = require("crypto");
-const prisma = require("../config/db");
+const { query, getConnection } = require("../config/db");
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_LENGTH = 8;
-
-function isMissingStudyGroupColumn(error) {
-    const message = String(error?.message || "");
-    return (
-        (error?.code === "P2022" && message.toLowerCase().includes("studygroupid")) ||
-        (message.includes("Unknown") && message.includes("studyGroupId")) ||
-        (message.includes("Could not find the column") && message.toLowerCase().includes("studygroupid"))
-    );
-}
-
-async function findActiveGroupSessions(groupId) {
-    try {
-        return await prisma.session.findMany({
-            where: {
-                studyGroupId: groupId,
-                endDateTime: null,
-            },
-            select: {
-                id: true,
-                subject: true,
-                startDateTime: true,
-                personId: true,
-                person: {
-                    select: {
-                        id: true,
-                        username: true,
-                        firstName: true,
-                        lastName: true,
-                        character: true,
-                    },
-                },
-            },
-            orderBy: {
-                id: "desc",
-            },
-        });
-    } catch (error) {
-        if (isMissingStudyGroupColumn(error)) {
-            return [];
-        }
-        throw error;
-    }
-}
 
 function randomInviteCode() {
     let code = "";
@@ -59,12 +16,9 @@ function randomInviteCode() {
 async function generateUniqueInviteCode() {
     for (let i = 0; i < 10; i += 1) {
         const inviteCode = randomInviteCode();
-        const existing = await prisma.studyGroup.findUnique({
-            where: { inviteCode },
-            select: { id: true },
-        });
+        const existing = await query("SELECT ID FROM STUDYGROUP WHERE inviteCode = ? LIMIT 1", [inviteCode]);
 
-        if (!existing) {
+        if (existing.length === 0) {
             return inviteCode;
         }
     }
@@ -72,7 +26,29 @@ async function generateUniqueInviteCode() {
     throw new Error("Failed to generate unique invite code");
 }
 
+async function findActiveGroupSessions(groupId) {
+    return query(
+        `SELECT
+            s.ID AS id,
+            s.subject,
+            s.startDateTime,
+            s.personID AS personId,
+            p.ID AS person_id,
+            p.username,
+            p.firstName,
+            p.lastName,
+            p.character
+         FROM SESSION s
+         INNER JOIN PERSON p ON p.ID = s.personID
+         WHERE s.studyGroupID = ? AND s.endDateTime IS NULL
+         ORDER BY s.ID DESC`,
+        [groupId]
+    );
+}
+
 async function createGroup(req, res, next) {
+    const connection = await getConnection();
+
     try {
         const { name } = req.body;
         const adminId = Number(req.user.id);
@@ -83,28 +59,31 @@ async function createGroup(req, res, next) {
 
         const inviteCode = await generateUniqueInviteCode();
 
-        const group = await prisma.studyGroup.create({
-            data: {
-                name: name.trim(),
-                adminId,
-                inviteCode,
-                members: {
-                    create: {
-                        personId: adminId,
-                    },
-                },
-            },
-            select: {
-                id: true,
-                name: true,
-                inviteCode: true,
-                adminId: true,
-            },
-        });
+        await connection.beginTransaction();
 
-        return res.status(201).json(group);
+        const [groupResult] = await connection.query(
+            "INSERT INTO STUDYGROUP (name, adminID, inviteCode) VALUES (?, ?, ?)",
+            [name.trim(), adminId, inviteCode]
+        );
+
+        await connection.query(
+            "INSERT INTO PARTOF (personID, groupID) VALUES (?, ?)",
+            [adminId, groupResult.insertId]
+        );
+
+        await connection.commit();
+
+        return res.status(201).json({
+            id: groupResult.insertId,
+            name: name.trim(),
+            inviteCode,
+            adminId,
+        });
     } catch (error) {
+        await connection.rollback();
         return next(error);
+    } finally {
+        connection.release();
     }
 }
 
@@ -117,28 +96,20 @@ async function rotateInviteCode(req, res, next) {
             return res.status(400).json({ message: "Invalid group id" });
         }
 
-        const group = await prisma.studyGroup.findUnique({
-            where: { id: groupId },
-            select: { id: true, adminId: true },
-        });
+        const groups = await query("SELECT ID AS id, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
 
-        if (!group) {
+        if (groups.length === 0) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        if (group.adminId !== userId) {
+        if (groups[0].adminId !== userId) {
             return res.status(403).json({ message: "Only admin can generate invite links" });
         }
 
         const inviteCode = await generateUniqueInviteCode();
+        await query("UPDATE STUDYGROUP SET inviteCode = ? WHERE ID = ?", [inviteCode, groupId]);
 
-        const updated = await prisma.studyGroup.update({
-            where: { id: groupId },
-            data: { inviteCode },
-            select: { id: true, inviteCode: true },
-        });
-
-        return res.status(200).json(updated);
+        return res.status(200).json({ id: groupId, inviteCode });
     } catch (error) {
         return next(error);
     }
@@ -153,34 +124,26 @@ async function joinByInviteCode(req, res, next) {
             return res.status(400).json({ message: "Invite code must be 8 letters" });
         }
 
-        const group = await prisma.studyGroup.findUnique({
-            where: { inviteCode },
-            select: { id: true, name: true, inviteCode: true },
-        });
+        const groups = await query(
+            "SELECT ID AS id, name, inviteCode FROM STUDYGROUP WHERE inviteCode = ? LIMIT 1",
+            [inviteCode]
+        );
 
-        if (!group) {
+        if (groups.length === 0) {
             return res.status(404).json({ message: "Invalid invite code" });
         }
 
-        const existingMembership = await prisma.partOf.findUnique({
-            where: {
-                personId_groupId: {
-                    personId,
-                    groupId: group.id,
-                },
-            },
-        });
+        const group = groups[0];
+        const existingMembership = await query(
+            "SELECT personID FROM PARTOF WHERE personID = ? AND groupID = ? LIMIT 1",
+            [personId, group.id]
+        );
 
-        if (existingMembership) {
+        if (existingMembership.length > 0) {
             return res.status(200).json({ message: "Already a member", group });
         }
 
-        await prisma.partOf.create({
-            data: {
-                personId,
-                groupId: group.id,
-            },
-        });
+        await query("INSERT INTO PARTOF (personID, groupID) VALUES (?, ?)", [personId, group.id]);
 
         return res.status(200).json({ message: "Joined group", group });
     } catch (error) {
@@ -198,44 +161,30 @@ async function removeMember(req, res, next) {
             return res.status(400).json({ message: "Invalid id" });
         }
 
-        const group = await prisma.studyGroup.findUnique({
-            where: { id: groupId },
-            select: { id: true, adminId: true },
-        });
+        const groups = await query("SELECT ID AS id, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
 
-        if (!group) {
+        if (groups.length === 0) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        if (group.adminId !== requesterId) {
+        if (groups[0].adminId !== requesterId) {
             return res.status(403).json({ message: "Only admin can remove members" });
         }
 
-        if (group.adminId === memberId) {
+        if (groups[0].adminId === memberId) {
             return res.status(400).json({ message: "Admin cannot be removed from group" });
         }
 
-        const membership = await prisma.partOf.findUnique({
-            where: {
-                personId_groupId: {
-                    personId: memberId,
-                    groupId,
-                },
-            },
-        });
+        const membership = await query(
+            "SELECT personID FROM PARTOF WHERE personID = ? AND groupID = ? LIMIT 1",
+            [memberId, groupId]
+        );
 
-        if (!membership) {
+        if (membership.length === 0) {
             return res.status(404).json({ message: "Member is not in this group" });
         }
 
-        await prisma.partOf.delete({
-            where: {
-                personId_groupId: {
-                    personId: memberId,
-                    groupId,
-                },
-            },
-        });
+        await query("DELETE FROM PARTOF WHERE personID = ? AND groupID = ?", [memberId, groupId]);
 
         return res.status(200).json({ message: "Member removed" });
     } catch (error) {
@@ -252,38 +201,33 @@ async function getGroupDetails(req, res, next) {
             return res.status(400).json({ message: "Invalid group id" });
         }
 
-        const group = await prisma.studyGroup.findUnique({
-            where: { id: groupId },
-            select: {
-                id: true,
-                name: true,
-                inviteCode: true,
-                adminId: true,
-                members: {
-                    select: {
-                        personId: true,
-                        person: {
-                            select: {
-                                id: true,
-                                username: true,
-                                firstName: true,
-                                lastName: true,
-                                email: true,
-                            },
-                        },
-                    },
-                    orderBy: {
-                        personId: "asc",
-                    },
-                },
-            },
-        });
+        const groups = await query(
+            "SELECT ID AS id, name, inviteCode, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1",
+            [groupId]
+        );
 
-        if (!group) {
+        if (groups.length === 0) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        const isMember = group.members.some((member) => member.personId === personId);
+        const members = await query(
+            `SELECT
+                po.personID AS personId,
+                p.ID AS id,
+                p.username,
+                p.firstName,
+                p.lastName,
+                p.email
+             FROM PARTOF po
+             INNER JOIN PERSON p ON p.ID = po.personID
+             WHERE po.groupID = ?
+             ORDER BY po.personID ASC`,
+            [groupId]
+        );
+
+        const group = groups[0];
+        const isMember = members.some((member) => member.personId === personId);
+
         if (!isMember) {
             return res.status(403).json({ message: "You are not a member of this group" });
         }
@@ -305,16 +249,22 @@ async function getGroupDetails(req, res, next) {
                     subject: session.subject,
                     startDateTime: session.startDateTime,
                     personId: session.personId,
-                    person: session.person,
+                    person: {
+                        id: session.person_id,
+                        username: session.username,
+                        firstName: session.firstName,
+                        lastName: session.lastName,
+                        character: session.character,
+                    },
                 })),
             },
-            members: group.members.map((member) => ({
-                id: member.person.id,
-                username: member.person.username,
-                firstName: member.person.firstName,
-                lastName: member.person.lastName,
-                email: member.person.email,
-                isAdmin: member.person.id === group.adminId,
+            members: members.map((member) => ({
+                id: member.id,
+                username: member.username,
+                firstName: member.firstName,
+                lastName: member.lastName,
+                email: member.email,
+                isAdmin: member.id === group.adminId,
             })),
         });
     } catch (error) {
@@ -331,22 +281,17 @@ async function deleteGroup(req, res, next) {
             return res.status(400).json({ message: "Invalid group id" });
         }
 
-        const group = await prisma.studyGroup.findUnique({
-            where: { id: groupId },
-            select: { id: true, adminId: true },
-        });
+        const groups = await query("SELECT ID AS id, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
 
-        if (!group) {
+        if (groups.length === 0) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        if (group.adminId !== personId) {
+        if (groups[0].adminId !== personId) {
             return res.status(403).json({ message: "Only admin can delete group" });
         }
 
-        await prisma.studyGroup.delete({
-            where: { id: groupId },
-        });
+        await query("DELETE FROM STUDYGROUP WHERE ID = ?", [groupId]);
 
         return res.status(200).json({ message: "Group deleted" });
     } catch (error) {
@@ -358,66 +303,40 @@ async function getMyGroups(req, res, next) {
     try {
         const personId = Number(req.user.id);
 
-        const groups = await prisma.studyGroup.findMany({
-            where: {
-                members: {
-                    some: {
-                        personId,
-                    },
-                },
-            },
-            select: {
-                id: true,
-                name: true,
-                inviteCode: true,
-                adminId: true,
-                _count: {
-                    select: {
-                        members: true,
-                    },
-                },
-            },
-            orderBy: {
-                id: "desc",
-            },
-        });
+        const groups = await query(
+            `SELECT
+                g.ID AS id,
+                g.name,
+                g.inviteCode,
+                g.adminID AS adminId,
+                COUNT(po.personID) AS memberCount,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM SESSION s
+                        WHERE s.studyGroupID = g.ID AND s.endDateTime IS NULL
+                    ) THEN TRUE
+                    ELSE FALSE
+                END AS hasActiveGroupSession
+             FROM STUDYGROUP g
+             INNER JOIN PARTOF myMembership ON myMembership.groupID = g.ID AND myMembership.personID = ?
+             LEFT JOIN PARTOF po ON po.groupID = g.ID
+             GROUP BY g.ID, g.name, g.inviteCode, g.adminID
+             ORDER BY g.ID DESC`,
+            [personId]
+        );
 
-        const groupIds = groups.map((group) => group.id);
-        const activeGroupIds = new Set();
-
-        if (groupIds.length > 0) {
-            try {
-                const activeGroups = await prisma.session.groupBy({
-                    by: ["studyGroupId"],
-                    where: {
-                        studyGroupId: { in: groupIds },
-                        endDateTime: null,
-                    },
-                });
-
-                activeGroups.forEach((groupSession) => {
-                    if (typeof groupSession.studyGroupId === "number") {
-                        activeGroupIds.add(groupSession.studyGroupId);
-                    }
-                });
-            } catch (error) {
-                if (!isMissingStudyGroupColumn(error)) {
-                    throw error;
-                }
-            }
-        }
-
-        const mapped = groups.map((group) => ({
-            id: group.id,
-            name: group.name,
-            inviteCode: group.inviteCode,
-            adminId: group.adminId,
-            isAdmin: group.adminId === personId,
-            memberCount: group._count.members,
-            hasActiveGroupSession: activeGroupIds.has(group.id),
-        }));
-
-        return res.status(200).json(mapped);
+        return res.status(200).json(
+            groups.map((group) => ({
+                id: group.id,
+                name: group.name,
+                inviteCode: group.inviteCode,
+                adminId: group.adminId,
+                isAdmin: group.adminId === personId,
+                memberCount: Number(group.memberCount),
+                hasActiveGroupSession: Boolean(group.hasActiveGroupSession),
+            }))
+        );
     } catch (error) {
         return next(error);
     }
