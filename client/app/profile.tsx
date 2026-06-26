@@ -144,15 +144,6 @@ export default function ProfileScreen() {
 
                             <Pressable
                                 onPress={() => {
-                                    void openExternalUrl(publicUrls.accountDeletion, "Account deletion");
-                                }}
-                                style={styles.linkButton}
-                            >
-                                <Text style={styles.linkButtonText}>Delete account on the web</Text>
-                            </Pressable>
-
-                            <Pressable
-                                onPress={() => {
                                     void openExternalUrl(publicUrls.support, "Support");
                                 }}
                                 style={styles.linkButton}
@@ -190,7 +181,6 @@ const styles = StyleSheet.create({
         backgroundColor: "#0b1220",
     },
     content: {
-        flex: 1,
         paddingHorizontal: 20,
         paddingTop: 48,
         paddingBottom: 24,
