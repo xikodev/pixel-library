@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Pixel Library",
-    "slug": "pixel-library",
+    "slug": "xikodev",
     "description": "Track study sessions, manage breaks, and study with private groups.",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,9 +16,14 @@
     "android": {
       "package": "com.xikodev.pixellibrary",
       "permissions": [
+        "INTERNET",
         "INTERNET"
       ],
       "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.VIBRATE",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -33,7 +38,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
-    "owner": "pixel-library",
+    "owner": "xikodevapps",
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
@@ -65,8 +70,18 @@
         "privacyPolicy": "https://appsupport.xikodev.xyz/pixel-library/privacy-policy/",
         "support": "https://appsupport.xikodev.xyz/pixel-library/support/",
         "accountDeletion": "https://appsupport.xikodev.xyz/pixel-library/account-deletion/",
-        "supportEmail": "support@xikodev.xyz"
+        "supportEmail": "xikodevapps@gmail.com"
+      },
+      "router": {},
+      "eas": {
+        "projectId": "0297c90f-0955-4f42-aecb-bf00f2364e80"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0297c90f-0955-4f42-aecb-bf00f2364e80"
     }
   }
 }

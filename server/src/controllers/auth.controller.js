@@ -46,8 +46,7 @@ async function signup(req, res, next) {
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await query(
-            `INSERT INTO PERSON (username, email, firstName, lastName, password, character)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+            "INSERT INTO PERSON (username, email, firstName, lastName, password, `character`) VALUES (?, ?, ?, ?, ?, ?)",
             [username, email, firstName, lastName, hashedPassword, character]
         );
 
@@ -82,17 +81,7 @@ async function login(req, res, next) {
         }
 
         const rows = await query(
-            `SELECT
-                ID AS id,
-                username,
-                email,
-                firstName,
-                lastName,
-                password,
-                character
-             FROM PERSON
-             WHERE email = ? OR username = ?
-             LIMIT 1`,
+            "SELECT ID AS id, username, email, firstName, lastName, password, `character` AS `character` FROM PERSON WHERE email = ? OR username = ? LIMIT 1",
             [identifier, identifier]
         );
 

@@ -11,7 +11,6 @@ if (!process.env.DATABASE_URL) {
 
     process.env.DATABASE_URL = `mysql://${user}:${password}@${host}:${port}/${database}`;
 }
-
 if (!process.env.JWT_SECRET) {
     console.error("Missing JWT_SECRET in environment");
     process.exit(1);

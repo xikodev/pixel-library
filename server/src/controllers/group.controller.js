@@ -28,20 +28,7 @@ async function generateUniqueInviteCode() {
 
 async function findActiveGroupSessions(groupId) {
     return query(
-        `SELECT
-            s.ID AS id,
-            s.subject,
-            s.startDateTime,
-            s.personID AS personId,
-            p.ID AS person_id,
-            p.username,
-            p.firstName,
-            p.lastName,
-            p.character
-         FROM SESSION s
-         INNER JOIN PERSON p ON p.ID = s.personID
-         WHERE s.studyGroupID = ? AND s.endDateTime IS NULL
-         ORDER BY s.ID DESC`,
+        "SELECT s.ID AS id, s.subject, s.startDateTime, s.personID AS personId, p.ID AS person_id, p.username, p.firstName, p.lastName, p.`character` AS `character` FROM SESSION s INNER JOIN PERSON p ON p.ID = s.personID WHERE s.studyGroupID = ? AND s.endDateTime IS NULL ORDER BY s.ID DESC",
         [groupId]
     );
 }

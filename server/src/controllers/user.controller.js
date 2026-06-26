@@ -65,19 +65,7 @@ async function getMe(req, res, next) {
     try {
         const userId = Number(req.user.id);
         const rows = await query(
-            `SELECT
-                ID AS id,
-                username,
-                email,
-                firstName,
-                lastName,
-                character,
-                totalTimeStudied,
-                totalBrakeTime,
-                totalBrakes
-             FROM PERSON
-             WHERE ID = ?
-             LIMIT 1`,
+            "SELECT ID AS id, username, email, firstName, lastName, `character` AS `character`, totalTimeStudied, totalBrakeTime, totalBrakes FROM PERSON WHERE ID = ? LIMIT 1",
             [userId]
         );
 
@@ -133,7 +121,7 @@ async function updateMe(req, res, next) {
                 return res.status(400).json({ message: "Character must be a number between 0 and 11" });
             }
 
-            updates.push("character = ?");
+            updates.push("`character` = ?");
             values.push(character);
         }
 
@@ -169,19 +157,7 @@ async function updateMe(req, res, next) {
         }
 
         const rows = await query(
-            `SELECT
-                ID AS id,
-                username,
-                email,
-                firstName,
-                lastName,
-                character,
-                totalTimeStudied,
-                totalBrakeTime,
-                totalBrakes
-             FROM PERSON
-             WHERE ID = ?
-             LIMIT 1`,
+            "SELECT ID AS id, username, email, firstName, lastName, `character` AS `character`, totalTimeStudied, totalBrakeTime, totalBrakes FROM PERSON WHERE ID = ? LIMIT 1",
             [userId]
         );
 

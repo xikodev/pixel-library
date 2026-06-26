@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
@@ -14,6 +14,7 @@ import { deleteMe, getMe, MeDto } from "@/src/services/user";
 import { formatDuration } from "@/src/utils/time";
 
 export default function ProfileScreen() {
+    const insets = useSafeAreaInsets();
     const [me, setMe] = useState<MeDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(false);
@@ -84,7 +85,7 @@ export default function ProfileScreen() {
 
     return (
         <SafeAreaView style={styles.screen}>
-            <View style={styles.content}>
+            <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(32, insets.bottom + 24) }]}>
                 <Pressable onPress={() => router.back()} style={styles.backButton}>
                     <Text style={styles.backText}>{"< Back"}</Text>
                 </Pressable>
@@ -178,7 +179,7 @@ export default function ProfileScreen() {
                         accent="amber"
                     />
                 )}
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
