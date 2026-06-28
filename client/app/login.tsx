@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,9 +8,12 @@ import { InlineStatus } from "@/components/inline-status";
 import { login } from "@/src/services/auth";
 import { getApiErrorMessage } from "@/src/services/api";
 import { pixelFontFamily } from "@/src/constants/typography";
+import { getSafeRedirectPath } from "@/src/services/navigation";
 import { setToken } from "@/src/services/token";
 
 export default function LoginScreen() {
+    const params = useLocalSearchParams<{ redirectTo?: string }>();
+    const redirectTo = getSafeRedirectPath(params.redirectTo);
     const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -28,7 +31,7 @@ export default function LoginScreen() {
             setStatusMessage(null);
             const result = await login({ identifier, password });
             await setToken(result.token);
-            router.replace("/home");
+            router.replace(redirectTo as "/home");
         } catch (error) {
             setStatusMessage(getApiErrorMessage(error, "Login failed"));
         } finally {
@@ -115,7 +118,7 @@ export default function LoginScreen() {
 
             <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 16 }}>
                 <Text style={{ color: "#9ca3af", fontSize: 17, fontFamily: pixelFontFamily }}>No account? </Text>
-                <Pressable onPress={() => router.push("/signup")}>
+                <Pressable onPress={() => router.push({ pathname: "/signup", params: { redirectTo } })}>
                     <Text style={{ color: "#60a5fa", fontSize: 17, fontFamily: pixelFontFamily }}>Create one</Text>
                 </Pressable>
             </View>

@@ -84,6 +84,7 @@ export default function RootLayout() {
                 <Stack.Screen name="home" />
                 <Stack.Screen name="history" />
                 <Stack.Screen name="groups" />
+                <Stack.Screen name="join/[code]" />
                 <Stack.Screen name="group/[id]" />
                 <Stack.Screen name="session" />
                 <Stack.Screen name="profile" />

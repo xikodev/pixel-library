@@ -6,7 +6,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { AppTextInput } from "@/components/app-text-input";
 import { InlineStatus } from "@/components/inline-status";
 import { QuestCard } from "@/components/quest-card";
-import { createGroup, getMyGroups, GroupDto, joinByCode } from "@/src/services/groups";
+import { createGroup, getMyGroups, GroupDto, requestJoinByCode } from "@/src/services/groups";
 import { pixelFontFamily } from "@/src/constants/typography";
 
 export default function GroupsScreen() {
@@ -55,7 +55,7 @@ export default function GroupsScreen() {
         }
     }
 
-    async function handleJoin() {
+    async function handleJoinRequest() {
         const code = joinCode.trim().toUpperCase();
         if (code.length !== 8) {
             setStatus({ tone: "error", message: "Invite code must be 8 letters." });
@@ -65,12 +65,16 @@ export default function GroupsScreen() {
         try {
             setLoading(true);
             setStatus(null);
-            await joinByCode(code);
+            const result = await requestJoinByCode(code);
             setJoinCode("");
-            await loadGroups();
-            setStatus({ tone: "success", message: "You joined the group." });
+            if (result.status === "member") {
+                await loadGroups();
+                setStatus({ tone: "success", message: "You are already a member of this group." });
+            } else {
+                setStatus({ tone: "success", message: "Join request sent. The group admin must approve it first." });
+            }
         } catch (error: any) {
-            setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to join group." });
+            setStatus({ tone: "error", message: error?.response?.data?.message || "Failed to request access to the group." });
         } finally {
             setLoading(false);
         }
@@ -87,7 +91,7 @@ export default function GroupsScreen() {
                     Groups
                 </Text>
                 <Text style={{ color: "#9ca3af", fontSize: 17, marginBottom: 18, fontFamily: pixelFontFamily }}>
-                    Create a private study group or join one with an invite code.
+                    Create a private study group or request access to one with an invite code.
                 </Text>
 
                 <View style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 14 }}>
@@ -119,7 +123,7 @@ export default function GroupsScreen() {
                 </View>
 
                 <View style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 16 }}>
-                    <Text style={{ color: "#9ca3af", fontSize: 17, marginBottom: 8, fontFamily: pixelFontFamily }}>Join with an invite code</Text>
+                    <Text style={{ color: "#9ca3af", fontSize: 17, marginBottom: 8, fontFamily: pixelFontFamily }}>Request access with an invite code</Text>
                     <AppTextInput
                         placeholder="ABCDEFGH"
                         placeholderTextColor="#9ca3af"
@@ -139,11 +143,11 @@ export default function GroupsScreen() {
                         }}
                     />
                     <Pressable
-                        onPress={handleJoin}
+                        onPress={handleJoinRequest}
                         disabled={loading}
                         style={{ backgroundColor: "#059669", borderRadius: 10, paddingVertical: 11, alignItems: "center" }}
                     >
-                        <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>Join Group</Text>
+                        <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>Request to Join</Text>
                     </Pressable>
                 </View>
 
@@ -186,7 +190,7 @@ export default function GroupsScreen() {
                     <QuestCard
                         eyebrow="No Guilds"
                         title="Your party list is empty"
-                        description="Create a fresh study group or join one with an invite code to start a shared session."
+                        description="Create a fresh study group or request access to one with an invite code to start a shared session."
                         accent="amber"
                     />
                 ) : null}

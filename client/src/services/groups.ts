@@ -27,6 +27,16 @@ export type GroupDetailsDto = {
     isAdmin: boolean;
     groupStudy: GroupStudyStatusDto;
     members: GroupMemberDto[];
+    pendingRequests: GroupJoinRequestDto[];
+};
+
+export type GroupJoinRequestDto = {
+    id: number;
+    username: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    createdAt: string;
 };
 
 export type GroupStudyStatusDto = {
@@ -48,6 +58,16 @@ export type GroupStudyStatusDto = {
     }[];
 };
 
+export type JoinGroupResponseDto = {
+    message: string;
+    status?: "member" | "pending";
+    group: {
+        id: number;
+        name: string;
+        inviteCode: string;
+    };
+};
+
 export async function getMyGroups() {
     const response = await api.get<GroupDto[]>("/groups/me");
     return response.data;
@@ -59,12 +79,27 @@ export async function createGroup(name: string) {
 }
 
 export async function joinByCode(code: string) {
-    const response = await api.post(`/groups/join/${code}`);
+    const response = await api.post<JoinGroupResponseDto>(`/groups/join/${code}`);
+    return response.data;
+}
+
+export async function requestJoinByCode(code: string) {
+    const response = await api.post<JoinGroupResponseDto>(`/groups/request/${code}`);
     return response.data;
 }
 
 export async function getGroupDetails(groupId: number) {
     const response = await api.get<GroupDetailsDto>(`/groups/${groupId}`);
+    return response.data;
+}
+
+export async function approveJoinRequest(groupId: number, personId: number) {
+    const response = await api.post(`/groups/${groupId}/requests/${personId}/approve`);
+    return response.data;
+}
+
+export async function rejectJoinRequest(groupId: number, personId: number) {
+    const response = await api.delete(`/groups/${groupId}/requests/${personId}`);
     return response.data;
 }
 

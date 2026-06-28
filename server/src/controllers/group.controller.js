@@ -33,6 +33,16 @@ async function findActiveGroupSessions(groupId) {
     );
 }
 
+async function findGroupById(groupId) {
+    const groups = await query("SELECT ID AS id, name, inviteCode, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
+    return groups[0] || null;
+}
+
+async function findGroupByInviteCode(inviteCode) {
+    const groups = await query("SELECT ID AS id, name, inviteCode, adminID AS adminId FROM STUDYGROUP WHERE inviteCode = ? LIMIT 1", [inviteCode]);
+    return groups[0] || null;
+}
+
 async function createGroup(req, res, next) {
     const connection = await getConnection();
 
@@ -83,13 +93,13 @@ async function rotateInviteCode(req, res, next) {
             return res.status(400).json({ message: "Invalid group id" });
         }
 
-        const groups = await query("SELECT ID AS id, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
+        const group = await findGroupById(groupId);
 
-        if (groups.length === 0) {
+        if (!group) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        if (groups[0].adminId !== userId) {
+        if (group.adminId !== userId) {
             return res.status(403).json({ message: "Only admin can generate invite links" });
         }
 
@@ -111,16 +121,12 @@ async function joinByInviteCode(req, res, next) {
             return res.status(400).json({ message: "Invite code must be 8 letters" });
         }
 
-        const groups = await query(
-            "SELECT ID AS id, name, inviteCode FROM STUDYGROUP WHERE inviteCode = ? LIMIT 1",
-            [inviteCode]
-        );
+        const group = await findGroupByInviteCode(inviteCode);
 
-        if (groups.length === 0) {
+        if (!group) {
             return res.status(404).json({ message: "Invalid invite code" });
         }
 
-        const group = groups[0];
         const existingMembership = await query(
             "SELECT personID FROM PARTOF WHERE personID = ? AND groupID = ? LIMIT 1",
             [personId, group.id]
@@ -138,6 +144,124 @@ async function joinByInviteCode(req, res, next) {
     }
 }
 
+async function requestJoinByInviteCode(req, res, next) {
+    try {
+        const inviteCode = String(req.params.code || "").toUpperCase().trim();
+        const personId = Number(req.user.id);
+
+        if (!/^[A-Z]{8}$/.test(inviteCode)) {
+            return res.status(400).json({ message: "Invite code must be 8 letters" });
+        }
+
+        const group = await findGroupByInviteCode(inviteCode);
+
+        if (!group) {
+            return res.status(404).json({ message: "Invalid invite code" });
+        }
+
+        const existingMembership = await query(
+            "SELECT personID FROM PARTOF WHERE personID = ? AND groupID = ? LIMIT 1",
+            [personId, group.id]
+        );
+
+        if (existingMembership.length > 0) {
+            return res.status(200).json({ message: "Already a member", status: "member", group });
+        }
+
+        const existingRequest = await query(
+            "SELECT personID FROM GROUPJOINREQUEST WHERE personID = ? AND groupID = ? LIMIT 1",
+            [personId, group.id]
+        );
+
+        if (existingRequest.length > 0) {
+            return res.status(200).json({ message: "Join request already pending", status: "pending", group });
+        }
+
+        await query("INSERT INTO GROUPJOINREQUEST (personID, groupID) VALUES (?, ?)", [personId, group.id]);
+
+        return res.status(200).json({ message: "Join request sent", status: "pending", group });
+    } catch (error) {
+        return next(error);
+    }
+}
+
+async function approveJoinRequest(req, res, next) {
+    const connection = await getConnection();
+
+    try {
+        const groupId = Number(req.params.id);
+        const memberId = Number(req.params.personId);
+        const requesterId = Number(req.user.id);
+
+        if (!Number.isInteger(groupId) || !Number.isInteger(memberId)) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
+
+        const group = await findGroupById(groupId);
+
+        if (!group) {
+            return res.status(404).json({ message: "Group not found" });
+        }
+
+        if (group.adminId !== requesterId) {
+            return res.status(403).json({ message: "Only admin can approve join requests" });
+        }
+
+        const requests = await query(
+            "SELECT personID FROM GROUPJOINREQUEST WHERE personID = ? AND groupID = ? LIMIT 1",
+            [memberId, groupId]
+        );
+
+        if (requests.length === 0) {
+            return res.status(404).json({ message: "Join request not found" });
+        }
+
+        await connection.beginTransaction();
+        await connection.query("INSERT IGNORE INTO PARTOF (personID, groupID) VALUES (?, ?)", [memberId, groupId]);
+        await connection.query("DELETE FROM GROUPJOINREQUEST WHERE personID = ? AND groupID = ?", [memberId, groupId]);
+        await connection.commit();
+
+        return res.status(200).json({ message: "Join request approved", group: { id: group.id, name: group.name } });
+    } catch (error) {
+        await connection.rollback();
+        return next(error);
+    } finally {
+        connection.release();
+    }
+}
+
+async function rejectJoinRequest(req, res, next) {
+    try {
+        const groupId = Number(req.params.id);
+        const memberId = Number(req.params.personId);
+        const requesterId = Number(req.user.id);
+
+        if (!Number.isInteger(groupId) || !Number.isInteger(memberId)) {
+            return res.status(400).json({ message: "Invalid id" });
+        }
+
+        const group = await findGroupById(groupId);
+
+        if (!group) {
+            return res.status(404).json({ message: "Group not found" });
+        }
+
+        if (group.adminId !== requesterId && requesterId !== memberId) {
+            return res.status(403).json({ message: "Only the admin can reject this join request" });
+        }
+
+        const result = await query("DELETE FROM GROUPJOINREQUEST WHERE personID = ? AND groupID = ?", [memberId, groupId]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Join request not found" });
+        }
+
+        return res.status(200).json({ message: requesterId === memberId ? "Join request cancelled" : "Join request rejected" });
+    } catch (error) {
+        return next(error);
+    }
+}
+
 async function removeMember(req, res, next) {
     try {
         const groupId = Number(req.params.id);
@@ -148,17 +272,17 @@ async function removeMember(req, res, next) {
             return res.status(400).json({ message: "Invalid id" });
         }
 
-        const groups = await query("SELECT ID AS id, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1", [groupId]);
+        const group = await findGroupById(groupId);
 
-        if (groups.length === 0) {
+        if (!group) {
             return res.status(404).json({ message: "Group not found" });
         }
 
-        if (groups[0].adminId !== requesterId) {
+        if (group.adminId !== requesterId) {
             return res.status(403).json({ message: "Only admin can remove members" });
         }
 
-        if (groups[0].adminId === memberId) {
+        if (group.adminId === memberId) {
             return res.status(400).json({ message: "Admin cannot be removed from group" });
         }
 
@@ -188,12 +312,9 @@ async function getGroupDetails(req, res, next) {
             return res.status(400).json({ message: "Invalid group id" });
         }
 
-        const groups = await query(
-            "SELECT ID AS id, name, inviteCode, adminID AS adminId FROM STUDYGROUP WHERE ID = ? LIMIT 1",
-            [groupId]
-        );
+        const group = await findGroupById(groupId);
 
-        if (groups.length === 0) {
+        if (!group) {
             return res.status(404).json({ message: "Group not found" });
         }
 
@@ -212,7 +333,6 @@ async function getGroupDetails(req, res, next) {
             [groupId]
         );
 
-        const group = groups[0];
         const isMember = members.some((member) => member.personId === personId);
 
         if (!isMember) {
@@ -220,6 +340,24 @@ async function getGroupDetails(req, res, next) {
         }
 
         const activeGroupSessions = await findActiveGroupSessions(group.id);
+        const pendingRequests =
+            group.adminId === personId
+                ? await query(
+                      `SELECT
+                          gjr.personID AS personId,
+                          gjr.createdAt,
+                          p.ID AS id,
+                          p.username,
+                          p.firstName,
+                          p.lastName,
+                          p.email
+                       FROM GROUPJOINREQUEST gjr
+                       INNER JOIN PERSON p ON p.ID = gjr.personID
+                       WHERE gjr.groupID = ?
+                       ORDER BY gjr.createdAt ASC`,
+                      [group.id]
+                  )
+                : [];
 
         return res.status(200).json({
             id: group.id,
@@ -252,6 +390,14 @@ async function getGroupDetails(req, res, next) {
                 lastName: member.lastName,
                 email: member.email,
                 isAdmin: member.id === group.adminId,
+            })),
+            pendingRequests: pendingRequests.map((request) => ({
+                id: request.id,
+                username: request.username,
+                firstName: request.firstName,
+                lastName: request.lastName,
+                email: request.email,
+                createdAt: request.createdAt,
             })),
         });
     } catch (error) {
@@ -336,5 +482,8 @@ module.exports = {
     createGroup,
     rotateInviteCode,
     joinByInviteCode,
+    requestJoinByInviteCode,
+    approveJoinRequest,
+    rejectJoinRequest,
     removeMember,
 };

@@ -1,11 +1,19 @@
 import { useLocalSearchParams, router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { deleteGroup, getGroupDetails, GroupDetailsDto, removeGroupMember } from "@/src/services/groups";
+import {
+    approveJoinRequest,
+    deleteGroup,
+    getGroupDetails,
+    GroupDetailsDto,
+    rejectJoinRequest,
+    removeGroupMember,
+} from "@/src/services/groups";
 import { QuestCard } from "@/components/quest-card";
 import { pixelFontFamily } from "@/src/constants/typography";
+import { buildGroupInviteLink } from "@/src/services/group-invites";
 
 export default function GroupDetailsScreen() {
     const params = useLocalSearchParams<{ id: string }>();
@@ -92,6 +100,54 @@ export default function GroupDetailsScreen() {
         ]);
     }
 
+    async function handleShareInviteLink() {
+        if (!group) {
+            return;
+        }
+
+        try {
+            const inviteLink = buildGroupInviteLink(group.inviteCode);
+            await Share.share({
+                message: `Request access to my Pixel Library group "${group.name}" using this invite link: ${inviteLink}\n\nInvite code: ${group.inviteCode}`,
+                url: inviteLink,
+            });
+        } catch {
+            Alert.alert("Error", "Failed to share invite link");
+        }
+    }
+
+    async function handleApproveJoinRequest(personId: number) {
+        if (!group?.isAdmin) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await approveJoinRequest(group.id, personId);
+            await loadGroup();
+        } catch (error: any) {
+            Alert.alert("Error", error?.response?.data?.message || "Failed to approve join request");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleRejectJoinRequest(personId: number) {
+        if (!group?.isAdmin) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await rejectJoinRequest(group.id, personId);
+            await loadGroup();
+        } catch (error: any) {
+            Alert.alert("Error", error?.response?.data?.message || "Failed to reject join request");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     function openGroupSessionScreen(options?: { subject?: string }) {
         if (!group) {
             return;
@@ -133,6 +189,21 @@ export default function GroupDetailsScreen() {
                         <Text style={{ color: group.isAdmin ? "#93c5fd" : "#9ca3af", fontSize: 16, marginBottom: 16, fontFamily: pixelFontFamily }}>
                             {group.isAdmin ? "You are admin" : "You are member"}
                         </Text>
+
+                        <Pressable
+                            onPress={handleShareInviteLink}
+                            style={{
+                                backgroundColor: "#2563eb",
+                                borderRadius: 10,
+                                paddingVertical: 11,
+                                alignItems: "center",
+                                marginBottom: 16,
+                            }}
+                        >
+                            <Text style={{ color: "#ffffff", fontSize: 17, fontFamily: pixelFontFamily }}>
+                                Share Invite Link
+                            </Text>
+                        </Pressable>
 
                         <View style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 16 }}>
                             <Text style={{ color: "#93c5fd", fontSize: 18, marginBottom: 8, fontFamily: pixelFontFamily }}>
@@ -213,6 +284,62 @@ export default function GroupDetailsScreen() {
                                 </>
                             )}
                         </View>
+
+                        {group.isAdmin && group.pendingRequests.length > 0 ? (
+                            <View style={{ backgroundColor: "#111827", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                                <Text style={{ color: "#fcd34d", fontSize: 18, marginBottom: 10, fontFamily: pixelFontFamily }}>
+                                    Join Requests ({group.pendingRequests.length})
+                                </Text>
+
+                                {group.pendingRequests.map((request) => (
+                                    <View
+                                        key={request.id}
+                                        style={{ backgroundColor: "#0f172a", borderRadius: 12, padding: 12, marginBottom: 10 }}
+                                    >
+                                        <Text style={{ color: "#ffffff", fontSize: 18, fontFamily: pixelFontFamily }}>
+                                            {request.firstName} {request.lastName}
+                                        </Text>
+                                        <Text style={{ color: "#9ca3af", fontSize: 16, marginTop: 2, fontFamily: pixelFontFamily }}>
+                                            @{request.username}
+                                        </Text>
+                                        <Text style={{ color: "#9ca3af", fontSize: 16, marginBottom: 10, fontFamily: pixelFontFamily }}>
+                                            {request.email}
+                                        </Text>
+
+                                        <Pressable
+                                            onPress={() => handleApproveJoinRequest(request.id)}
+                                            disabled={loading}
+                                            style={{
+                                                backgroundColor: "#059669",
+                                                borderRadius: 10,
+                                                paddingVertical: 10,
+                                                alignItems: "center",
+                                                marginBottom: 8,
+                                            }}
+                                        >
+                                            <Text style={{ color: "#ffffff", fontSize: 17, fontFamily: pixelFontFamily }}>
+                                                Approve Request
+                                            </Text>
+                                        </Pressable>
+
+                                        <Pressable
+                                            onPress={() => handleRejectJoinRequest(request.id)}
+                                            disabled={loading}
+                                            style={{
+                                                backgroundColor: "#7f1d1d",
+                                                borderRadius: 10,
+                                                paddingVertical: 10,
+                                                alignItems: "center",
+                                            }}
+                                        >
+                                            <Text style={{ color: "#ffffff", fontSize: 17, fontFamily: pixelFontFamily }}>
+                                                Reject Request
+                                            </Text>
+                                        </Pressable>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null}
 
                         {group.isAdmin ? (
                             <Pressable

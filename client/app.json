@@ -70,7 +70,8 @@
         "privacyPolicy": "https://appsupport.xikodev.xyz/pixel-library/privacy-policy/",
         "support": "https://appsupport.xikodev.xyz/pixel-library/support/",
         "accountDeletion": "https://appsupport.xikodev.xyz/pixel-library/account-deletion/",
-        "supportEmail": "xikodevapps@gmail.com"
+        "supportEmail": "xikodevapps@gmail.com",
+        "groupInvitesBaseUrl": "https://pixel-library-api.xikodev.xyz/api"
       },
       "router": {},
       "eas": {

@@ -14,9 +14,15 @@ async function request(path, options = {}) {
         const url = `http://127.0.0.1:${address.port}${path}`;
         const response = await fetch(url, options);
         const text = await response.text();
-        const body = text ? JSON.parse(text) : null;
+        let body = null;
 
-        return { response, body };
+        try {
+            body = text ? JSON.parse(text) : null;
+        } catch {
+            body = null;
+        }
+
+        return { response, body, text };
     } finally {
         await new Promise((resolve, reject) => {
             server.close((error) => {
@@ -36,6 +42,14 @@ test("GET /api/health returns ok", async () => {
 
     assert.equal(response.status, 200);
     assert.deepEqual(body, { ok: true });
+});
+
+test("public invite route returns html without auth", async () => {
+    const { response, text } = await request("/api/invite/ABCDEFGH");
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /text\/html/i);
+    assert.match(text, /pixellibrary:\/\/join\/ABCDEFGH/);
 });
 
 test("protected API requires bearer token", async () => {
